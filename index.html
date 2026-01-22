@@ -1,0 +1,2395 @@
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Шахматка</title>
+<!-- Day.js (даты/форматирование) -->
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/isSameOrAfter.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/isSameOrBefore.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/isoWeek.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/weekday.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/minMax.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/resize-observer-polyfill@1.5.1"></script>
+<style>
+    /* ============================================================
+       АДАПТИРОВАННЫЕ СТИЛИ ДЛЯ V8WebKit
+       - Убраны CSS Custom Properties (var())
+       - Все значения инлайнены
+       - Упрощены сложные селекторы
+       ============================================================ */
+
+    * { 
+      box-sizing: border-box; 
+      -webkit-box-sizing: border-box;
+    }
+    
+    label {
+        padding: 0px 4px;
+    }
+    
+    .padding {
+        padding: 0px 4px;
+    }
+    
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: #1d2433;
+	  background: #fff;
+	  user-select: none; /* Запретить выделение текста на всей странице */
+      
+    }
+
+    /* ---------- Layout ---------- */
+    .board {
+      height: calc(100vh - 62px);
+      display: -webkit-flex;
+      display: flex;
+      -webkit-flex-direction: column;
+      flex-direction: column;
+      min-height: 420px;
+    }
+
+    /* Header row (days) */
+    .gridHeader {
+      display: -webkit-flex;
+      display: flex;
+      border-bottom: 2px solid #cfd4e2;
+      background: #f7f8fb;
+      height: 46px;
+    }
+    
+    .corner {
+      width: 240px;
+      min-width: 240px;
+      border-right: 1px solid #e6e8ee;
+      padding: 10px 10px;
+      font-weight: 600;
+      color: #6b7485;
+      display: -webkit-flex;
+      display: flex;
+      -webkit-align-items: center;
+      align-items: center;
+      height: 44px;
+    }
+
+    .daysViewport {
+      overflow-x: auto; /* Для manual */
+  		overflow-y: auto;
+      -webkit-flex: 1;
+      flex: 1;
+      height: 44px;
+    }
+    
+    
+
+    .daysRow {
+      display: -webkit-flex;
+      display: flex;
+      width: -webkit-max-content;
+      width: max-content;
+      height: 44px;
+    }
+    
+    .dayCell {
+      width: 72px;
+      min-width: 72px;
+      border-right: 1px solid #e6e8ee;
+      padding: 6px 6px;
+      text-align: center;
+      line-height: 1.15;
+      -webkit-user-select: none;
+      user-select: none;
+      font-size: 12px;
+      color: #6b7485;
+      white-space: nowrap;
+      height: 44px;
+      display: -webkit-flex;
+      display: flex;
+      -webkit-align-items: center;
+      align-items: center;
+      -webkit-justify-content: center;
+      justify-content: center;
+    }
+    
+    .dayCell .d {
+      font-weight: 650;
+      color: #1d2433;
+      font-size: 12px;
+    }
+    
+    .dayCell.today { 
+      background: #fff2f2; 
+    }
+
+    /* Body */
+    .gridBody {
+      position: relative;
+      display: -webkit-flex;
+      display: flex;
+      -webkit-flex: 1;
+      flex: 1;
+      min-height: 0;
+      background: #fff;
+    }
+    
+    .leftCol {
+      width: 240px;
+      min-width: 240px;
+      border-right: 1px solid #e6e8ee;
+      overflow: hidden;
+      background: #fff;
+    }
+    
+    .rowsViewport {
+      -webkit-flex: 1;
+      flex: 1;
+      overflow: auto;
+      position: relative;
+      background: #fff;
+    }
+    
+    /* auto */
+	.rowsViewport.auto {
+	  overflow-x: hidden;
+	}
+
+	/* manual */
+	.rowsViewport.manual {
+	  overflow-x: auto;
+	}
+	#daysViewport {
+  overflow: hidden;
+}
+    .rowsContent {
+      width: -webkit-max-content;
+      width: max-content;
+      position: relative;
+    }
+
+    .rowLabel {
+      height: 42px;
+      display: -webkit-flex;
+      display: flex;
+      -webkit-align-items: center;
+      align-items: center;
+      padding: 0 10px;
+      border-bottom: 1px solid #e6e8ee;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 13px;
+    }
+    
+    .rowLabel .meta {
+      margin-left: auto;
+      font-size: 12px;
+      color: #6b7485;
+    }
+    
+    .row {
+      position: relative;
+      height: 42px;
+      border-bottom: 1px solid #e6e8ee;
+    }
+
+    .rowInner {
+      position: relative;
+      height: 100%;
+      display: -webkit-flex;
+      display: flex;
+      width: -webkit-max-content;
+      width: max-content;
+    }
+    
+    .cell {
+      width: 72px;
+      min-width: 72px;
+      border-right: 1px solid #e6e8ee;
+      position: relative;
+    }
+    
+    .cell:hover { 
+      background: #fafbff; 
+    }
+
+    /* Selection overlay */
+    .selection {
+      position: absolute;
+      top: 6px;
+      height: 30px;
+      background: rgba(66, 133, 244, 0.25);
+      border: 1px dashed rgba(66, 133, 244, 0.6);
+      border-radius: 8px;
+      pointer-events: none;
+      display: none;
+    }
+
+    .bookingsLayer {
+      position: relative;
+      left: 0;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      pointer-events: none;
+    }
+    
+    .booking-wrap {
+	  position: absolute;
+	  top: 6px;
+	  pointer-events: auto;
+	  overflow: visible; 
+	  cursor: grab;
+  		cursor: -webkit-grab; 
+	}
+	.booking-wrap:active .booking {
+	  cursor: grabbing;
+	  cursor: -webkit-grabbing;
+	}
+	.booking {
+	  height: 30px;
+	  border-radius: 10px;
+	  padding: 6px 8px;
+	  font-size: 12px;
+	  overflow: hidden; /* ← режем ТОЛЬКО текст */
+	  white-space: nowrap;
+	  box-shadow: 0 1px 0 rgba(0,0,0,.05),
+	              0 6px 18px rgba(0,0,0,.08);
+		cursor: grab; 
+  cursor: -webkit-grab; 
+	}
+	.booking:active { 
+  cursor: grabbing;
+  cursor: -webkit-grabbing;
+}
+	.booking-label {
+	  display: block;
+	  overflow: hidden;
+	  text-overflow: ellipsis;
+	}
+	
+	.booking[data-locked="true"] {
+	  cursor: not-allowed !important;
+	  opacity: 0.75;
+	}
+	.api-badge {
+	  position: absolute;
+	  top: -6px;
+	  right: -6px;
+	  font-size: 9px;
+	  background: #ff4444;
+	  color: #fff;
+	  padding: 2px 5px;
+	  border-radius: 10px;
+	  border: 1px solid #fff;
+	  font-weight: bold;
+	  line-height: 1;
+	  pointer-events: none;
+	  z-index: 10;
+	}
+
+    
+    
+    .booking.dragging { 
+      opacity: .85; 
+      box-shadow: 0 4px 20px rgba(0,0,0,.2);
+      z-index: 100;
+    }
+    
+    .booking.drag-invalid {
+      opacity: .5;
+      border: 2px dashed #e31b23 !important;
+    }
+	
+	.booking-wrap.selected .booking,
+	.booking.selected {
+	  box-shadow: 0 0 0 2px #2196F3, 0 0 10px rgba(33, 150, 243, 0.5);
+	  z-index: 10 !important;
+	  transform: scale(1.01);
+	}
+	
+	.apartment-status {
+	  position: absolute;
+	  top: 6px;
+	  height: 30px;
+	  border-radius: 8px;  /* Меньше скругление, чем у бронирований */
+	  padding: 6px 8px;
+	  font-size: 12px;
+	  overflow: hidden;
+	  white-space: nowrap;
+	  text-overflow: ellipsis;
+	  pointer-events: auto;
+	  cursor: grab; 
+	  cursor: -webkit-grab; 
+	  -webkit-user-select: none;
+	  user-select: none;
+	  border: 1px dashed rgba(0,0,0,.15);  /* Пунктирная граница */
+	  color: #1d2433;
+	  opacity: 0.7;
+	}
+	
+	.apartment-status:active { 
+      cursor: grabbing;
+      cursor: -webkit-grabbing;
+    }
+    
+    .apartment-status.dragging { 
+      opacity: .85; 
+      box-shadow: 0 4px 20px rgba(0,0,0,.2);
+      z-index: 100;
+    }
+    
+    .apartment-status.drag-invalid {
+      opacity: .5;
+      border: 2px dashed #e31b23 !important;
+    }
+    
+    .apartment-status.selected {
+	  box-shadow: 0 0 0 2px #4CAF50, 0 0 10px rgba(76, 175, 80, 0.5);
+	  z-index: 10 !important;
+	  transform: scale(1.01);
+	  opacity: 0.8 !important;
+	}
+
+	.info-popover {
+	  z-index: 1000 !important;
+	  user-select: text;
+	  cursor: auto;
+	}
+	
+	.popover-buttons {
+	display: flex;
+	justify-content: flex-start;
+	gap: 8px;
+	margin-top: 12px;
+	padding: 8px 0;
+	border-top: 1px solid #e0e0e0;
+	}
+	.btn-open, .btn-copy {
+	padding: 6px 12px;
+	font-size: 14px;
+	font-weight: 500;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: background-color 0.2s ease, transform 0.1s ease;
+	}
+	.btn-open {
+	background: #007bff;
+	color: white;
+	}
+	.btn-open:hover {
+	background: #0056b3;
+	transform: translateY(-1px);
+	}
+	.btn-copy {
+	background: #6c757d;
+	color: white;
+	}
+	.btn-copy:hover {
+	background: #5a6268;
+	transform: translateY(-1px);
+	}
+	.btn-open:active, .btn-copy:active {
+	transform: translateY(0);
+	}
+    /* Now line */
+    .nowLine {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #e31b23;
+      z-index: 30;
+      pointer-events: none;
+    }
+    
+    .nowLine:before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: -4px;
+      width: 10px;
+      height: 10px;
+      background: #e31b23;
+      border-radius: 999px;
+      box-shadow: 0 2px 10px rgba(227,27,35,.35);
+    }
+
+    /* Popovers / menu */
+    .popover {
+      position: fixed;
+      z-index: 100;
+      min-width: 260px;
+      max-width: 360px;
+      background: #fff;
+      border: 1px solid #e6e8ee;
+      border-radius: 12px;
+      box-shadow: 0 14px 40px rgba(0,0,0,.15);
+      padding: 10px 12px;
+      display: none;
+    }
+    
+    .popover .title { 
+      font-weight: 700; 
+      margin-bottom: 6px; 
+    }
+    
+    .popover .kv {
+      display: -webkit-flex;
+      display: flex;
+      -webkit-flex-wrap: wrap;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+      font-size: 12px;
+      color: #6b7485;
+    }
+    
+    .popover .kv-row {
+      display: -webkit-flex;
+      display: flex;
+      width: 100%;
+      margin-bottom: 4px;
+    }
+    
+    .popover .kv-label {
+      width: 110px;
+      min-width: 110px;
+      color: #6b7485;
+    }
+    
+    .popover .kv-value {
+      -webkit-flex: 1;
+      flex: 1;
+      color: #1d2433;
+      font-weight: 600;
+    }
+
+    .ctx {
+      position: fixed;
+      z-index: 120;
+      background: #fff;
+      border: 1px solid #e6e8ee;
+      border-radius: 12px;
+      box-shadow: 0 14px 40px rgba(0,0,0,.18);
+      padding: 6px;
+      display: none;
+      min-width: 180px;
+    }
+    
+    .ctx button {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    
+    .ctx button:hover { 
+      background: #d6ddff; 
+    }
+
+    @media (max-width: 840px) {
+      .corner,
+      .leftCol {
+        width: 180px;
+        min-width: 180px;
+      }
+    }
+    
+    .ui-blocked #app {
+	  filter: blur(3px) grayscale(30%);
+	  pointer-events: none;
+	  transition: filter 0.15s ease;
+	}
+
+	.ui-blocked::after {
+	  content: "";
+	  position: fixed;
+	  inset: 0;
+	  background: rgba(255,255,255,0.25);
+	  z-index: 999;
+	}
+  </style>
+	<body>
+		<button id="actionButton" style="display: none;">Скрытая</button>
+<div class="board" id="app">
+    <div class="gridHeader">
+        <div class="corner">Квартиры</div>
+        <div class="daysViewport" id="daysViewport">
+            <div class="daysRow" id="daysRow"></div>
+        </div>
+    </div>
+    
+    <div class="gridBody">
+        <div class="leftCol" id="leftCol"></div>
+        <div class="rowsViewport" id="rowsViewport">
+            <div class="rowsContent" id="rowsContent"></div>
+            <div class="nowLine" id="nowLine" style="display:none"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Всплывающая информация о бронировании при наведении -->
+<div class="popover" id="infoPopover" aria-hidden="true"></div>
+
+<!-- Контекстное меню по правой кнопке -->
+<div class="ctx" id="ctxMenu" aria-hidden="true">
+    <button id="ctxOpen">Открыть</button>
+    <button id="ctxCopy">Скопировать</button>
+</div>
+		<script>
+			// polyfills.js
+if (typeof structuredClone === 'undefined') {
+	window.structuredClone = function(obj) {
+		return JSON.parse(JSON.stringify(obj));
+	};
+}
+
+// dayjs-extensions.js
+dayjs.extend(dayjs_plugin_isoWeek);
+dayjs.extend(dayjs_plugin_weekday);
+dayjs.extend(dayjs_plugin_isSameOrAfter);
+dayjs.extend(dayjs_plugin_isSameOrBefore);
+// utils.js
+
+var dateFormatCache = {};
+
+function getFormattedDate(date, format) {
+	var key = date.valueOf() + '|' + format;
+	if (!dateFormatCache[key]) {
+		dateFormatCache[key] = date.format(format);
+	}
+	return dateFormatCache[key];
+}
+
+function clearFormatCache() {
+	dateFormatCache = {};
+}
+
+function clamp(n, a, b) {
+	return Math.max(a, Math.min(b, n));
+}
+
+function dayId(d) {
+	return "day-" + d.format("YYYY-MM-DD");
+}
+
+function cellId(apartmentId, d) {
+	return "cell-" + apartmentId + "-" + d.format("YYYY-MM-DD");
+}
+
+function bookingIdStr(b) {
+	// Используем комбинацию id и dateCreate для уникальности
+	return "booking-" + b.id + "-" + (b.dateCreate || "0");
+}
+
+function apartmentStatusIdStr(s) {
+	// Используем комбинацию id и dateCreate для уникальности
+	return "status-" + s.id + "-" + (s.dateCreate || "0");
+}
+
+function isSameStatusPeriod(s1, s2) {
+	return s1.apartmentId === s2.apartmentId &&
+		s1.start === s2.start &&
+		s1.end === s2.end;
+}
+
+function apartmentRowId(apartmentId) {
+	return "apartment-" + apartmentId;
+}
+
+function dispatch(name, detail) {
+	var btn = document.getElementById('actionButton');
+	btn.setAttribute('data-action', name);
+	btn.setAttribute('data-details', JSON.stringify(detail));
+	btn.click();
+}
+
+function findBookingByIdAndDateCreate(id, dateCreate) {
+	return bookings.find(x => String(x.id) === String(id) && String(x.dateCreate) === String(dateCreate));
+}
+
+function findStatusByIdAndDateCreate(id, dateCreate) {
+	return apartmentStatuses.find(x => String(x.id) === String(id) && String(x.dateCreate) === String(dateCreate));
+}
+
+function applyPendingAction(pa) {
+	if (pa.type === "booking") {
+		var b = findBookingByIdAndDateCreate(pa.id, pa.dateCreate);
+		if (b) Object.assign(b, pa.newState);
+	}
+	if (pa.type === "status") {
+		var s = findStatusByIdAndDateCreate(pa.id, pa.dateCreate);
+		if (s) Object.assign(s, pa.newState);
+	}
+}
+
+function rollbackPendingAction(pa) {
+	if (pa.type === "booking") {
+		var b = findBookingByIdAndDateCreate(pa.id, pa.dateCreate);
+		if (b) Object.assign(b, pa.oldState);
+	}
+	if (pa.type === "status") {
+		var s = findStatusByIdAndDateCreate(pa.id, pa.dateCreate);
+		if (s) Object.assign(s, pa.oldState);
+	}
+}
+
+function blockUI() {
+	uiBlocked = true;
+	document.body.classList.add("ui-blocked");
+}
+
+function unblockUI() {
+	uiBlocked = false;
+	document.body.classList.remove("ui-blocked");
+}
+
+function fixPopover(type, id, clientX, clientY) {
+	fixedPopover.isFixed = true;
+	fixedPopover.type = type;
+	fixedPopover.id = id;
+	fixedPopover.position = {
+		x: clamp(clientX + 16, 8, window.innerWidth - 380),
+		y: clamp(clientY + 16, 8, window.innerHeight - 220)
+	};
+
+	// Применяем фиксированную позицию
+	el.infoPopover.style.left = fixedPopover.position.x + "px";
+	el.infoPopover.style.top = fixedPopover.position.y + "px";
+	// Устанавливаем класс для видимости подсказки
+	el.infoPopover.classList.add("info-popover");
+	// Показываем подсказку
+	el.infoPopover.style.display = "block";
+}
+
+function safe(val) {
+	return val || '';
+}
+
+function isInsideApp(el) {
+	return el && (el.id === 'app' || findParentWithClass(el, 'board'));
+}
+
+function findParentWithClass(element, className) {
+	var current = element;
+	while (current && current !== document) {
+		if (current.classList && current.classList.contains(className)) {
+			return current;
+		}
+		current = current.parentNode;
+	}
+	return null;
+}
+
+function applyScrollMode() {
+	el.rowsViewport.classList.toggle("auto", state.periodAuto);
+	el.rowsViewport.classList.toggle("manual", !state.periodAuto);
+}
+
+function perf(label) {
+	const t = performance.now();
+	return () => {
+		const dt = performance.now() - t;
+		console.log(`⏱ ${label}: ${dt.toFixed(1)} ms`);
+  };
+}
+
+// state.js
+var apartmentCache = {}; // Кэш для быстрого поиска квартир
+var cachedDates = []; // Кэш для дат
+
+function getApartmentById(id) {
+	if (!apartmentCache[id]) {
+		apartmentCache[id] = apartments.find(a => a.id === id);
+	}
+	return apartmentCache[id];
+}
+
+function getCachedDate(anchorDate, dayOffset) {
+	if (!cachedDates[dayOffset]) {
+		cachedDates[dayOffset] = anchorDate.add(dayOffset, "day");
+	}
+	return cachedDates[dayOffset];
+}
+
+function invalidateDateCache() {
+	cachedDates = [];
+}
+
+var selectedItem = {
+	type: null,
+	id: null,
+	element: null
+};
+var fixedPopover = {
+	isFixed: false,
+	type: null,
+	id: null,
+	position: {
+		x: 0,
+		y: 0
+	}
+};
+var uiBlocked = false;
+var pendingAction = null;
+var apartments = [];
+var bookings = [];
+var apartmentStatuses = []; // Статусы квартир (ремонт, уборка и т.д.)
+var statusColors = {};
+
+var state = {
+	anchorDate: dayjs().startOf("day"),
+	visibleDays: 0,
+	columnWidth: 72,
+	tariffMode: false,
+	selecting: null,
+	periodAuto: true,
+	periodFrom: null,
+	periodTo: null
+};
+
+var dragState = null;
+
+var el = {
+	daysViewport: document.getElementById("daysViewport"),
+	daysRow: document.getElementById("daysRow"),
+	leftCol: document.getElementById("leftCol"),
+	rowsViewport: document.getElementById("rowsViewport"),
+	rowsContent: document.getElementById("rowsContent"),
+	nowLine: document.getElementById("nowLine"),
+	infoPopover: document.getElementById("infoPopover")
+};
+
+var bookingsByApartment = {};
+var statusesByApartment = {};
+
+var visibilityState = {
+	currentVisibleRange: null,
+	lastRequestedRange: null
+};
+
+// Функция для определения расширенного диапазона загрузки
+function getExtendedLoadRange() {
+	const visible = getVisibleRange();
+
+	if (!state.periodAuto) {
+		// РУЧНОЙ ПЕРИОД: загружаем ВЕСЬ период сразу
+		return {
+			start: state.periodFrom,
+			end: state.periodTo
+		};
+	} else {
+		// АВТО ПЕРИОД: используем буфер
+		const bufferDays = 14;
+		const MAX_LOAD_DAYS = 180;
+
+		let start = visible.start.subtract(bufferDays, 'day');
+		let end = visible.end.add(bufferDays, 'day');
+
+		if (end.diff(start, 'day') > MAX_LOAD_DAYS) {
+			const halfBuffer = Math.floor(MAX_LOAD_DAYS / 2);
+			const visibleCenter = visible.start.add(visible.days / 2, 'day');
+			start = visibleCenter.subtract(halfBuffer, 'day');
+			end = visibleCenter.add(halfBuffer, 'day');
+		}
+
+		return {
+			start,
+			end
+		};
+	}
+}
+//selection_functions.js
+function selectItem(type, id, element, ev) {
+	// Снимаем предыдущее выделение
+	if (selectedItem.element) {
+		selectedItem.element.classList.remove("selected");
+	}
+
+	// Устанавливаем новое выделение
+	selectedItem.type = type;
+	selectedItem.id = id;
+	selectedItem.element = element;
+
+	// Добавляем класс выделения
+	element.classList.add("selected");
+
+	// Фиксируем подсказку в позиции клика
+	if (ev) {
+		// Показываем соответствующую подсказку в позиции клика
+		if (type === "booking") {
+			var booking = findBookingByIdAndDateCreate(id, element.getAttribute("data-date-create"));
+			if (booking) {
+				fixPopover(type, id, ev.clientX, ev.clientY);
+				showBookingPopover(ev, booking, true); // true - для фиксированной позиции
+			}
+		} else if (type === "status") {
+			var status = findStatusByIdAndDateCreate(id, element.getAttribute("data-date-create"));
+			if (status) {
+				fixPopover(type, id, ev.clientX, ev.clientY);
+				showStatusPopover(ev, status, true); // true - для фиксированной позиции
+			}
+		}
+	}
+
+	// Очищаем выделение ячеек если было
+	if (state.selecting) {
+		clearSelectionOverlay();
+		state.selecting = null;
+	}
+}
+
+function deselectItem() {
+	if (selectedItem.element) {
+		selectedItem.element.classList.remove("selected");
+	}
+	selectedItem.type = null;
+	selectedItem.id = null;
+	selectedItem.element = null;
+
+	// Снимаем фиксацию подсказки
+	fixedPopover.isFixed = false;
+	el.infoPopover.style.display = "none";
+}
+
+function isItemSelected() {
+	return selectedItem.element !== null;
+}
+// period-logic.js
+
+function onPeriodChanged() {
+	// Сбрасываем кеш при изменении периода
+	visibilityState.lastRequestedRange = null;
+	clearAllCaches(); 
+	
+	const p = getVisibleDaysAndAnchor();
+  	state.visibleDays = p.days;
+  
+	checkAndRequestData();
+	renderAll(); // FIX: Полный перерендер
+}
+
+function calcAutoVisibleDays() {
+	return Math.floor(el.rowsViewport.clientWidth / state.columnWidth);
+}
+
+function getVisibleDaysAndAnchor() {
+	if (state.periodAuto) {
+		return {
+			anchor: state.anchorDate.startOf("day"),
+			days: calcAutoVisibleDays()
+		};
+	}
+	var from = state.periodFrom;
+	var to = state.periodTo;
+	if (from && to && (to.isSame(from) || to.isAfter(from))) {
+		var days = to.diff(from, "day") + 1;
+		return {
+			anchor: from,
+			days: clamp(days, 1, 366) // FIX: Уже есть, но ок
+		};
+	}
+	// FIX: Fallback на auto, если период неверный
+	console.warn('Неверный manual период — fallback на auto');
+	return {
+		anchor: state.anchorDate.startOf("day"),
+		days: calcAutoVisibleDays()
+	};
+}
+
+function getVisibleRange() {
+	const p = getVisibleDaysAndAnchor();
+	const start = p.anchor.startOf("day");
+	const end = start.add(p.days, "day"); // end НЕ включительно
+	return {
+		start,
+		end,
+		days: p.days
+	};
+}
+// render.js
+function updateSelectedItemPopover() {
+	if (!selectedItem.element) return;
+
+	var rect = selectedItem.element.getBoundingClientRect();
+	var ev = {
+		clientX: rect.left + rect.width / 2,
+		clientY: rect.top + rect.height / 2
+	};
+
+	if (selectedItem.type === "booking") {
+		var dateCreate = selectedItem.element.getAttribute("data-date-create");
+		var booking = findBookingByIdAndDateCreate(selectedItem.id, dateCreate);
+		if (booking) showBookingPopover(ev, booking);
+	} else if (selectedItem.type === "status") {
+		var dateCreate = selectedItem.element.getAttribute("data-date-create");
+		var status = findStatusByIdAndDateCreate(selectedItem.id, dateCreate);
+		if (status) showStatusPopover(ev, status);
+	}
+}
+
+function checkAndRequestData(force = false) {
+	// Проверяем только если квартиры уже загружены
+	if (apartments.length === 0) {
+		return;
+	}
+
+	const currentRange = getExtendedLoadRange();
+	const lastRange = visibilityState.lastRequestedRange;
+
+	// Проверяем, нужно ли загружать новые данные
+	if (force ||
+		!lastRange ||
+		currentRange.start.isBefore(lastRange.start) ||
+		currentRange.end.isAfter(lastRange.end)) {
+
+		// Определяем видимые квартиры (все загружены, берем по индексам)
+		const visibleRows = getVisibleRowRange();
+		const visibleApartmentIds = [];
+
+		for (let i = visibleRows.first; i <= visibleRows.last; i++) {
+			if (apartments[i]) {
+				visibleApartmentIds.push(apartments[i].id);
+			}
+		}
+
+		if (visibleApartmentIds.length > 0) {
+			requestDocumentsForRange(currentRange.start, currentRange.end, visibleApartmentIds);
+		}
+
+		visibilityState.lastRequestedRange = currentRange;
+	}
+}
+
+function renderAll() {
+
+	const end = perf("renderAll TOTAL");
+	
+	invalidateDateCache();
+	
+	let t = perf("renderHeaderDays");
+	renderHeaderDays();
+	t();
+	
+	t = perf("renderVisibleRows");
+	renderVisibleRows();
+	t();
+	
+	t = perf("renderVisibleItems");
+	renderVisibleItems();
+	t();
+	
+	t = perf("updateSelectedItemPopover");
+	updateSelectedItemPopover();
+	t();
+	
+	t = perf("renderNowLine");
+	renderNowLine();
+	t();
+	
+	t = perf("syncHeaderScroll");
+	syncHeaderScroll();
+	t();
+	
+	end();
+	
+	console.log(
+		"DOM stats:",
+		"cells =", document.querySelectorAll('.cell').length,
+		"rows =", document.querySelectorAll('.row').length,
+		"bookings =", document.querySelectorAll('.booking-wrap').length
+	);
+}
+
+
+function renderHeaderDays() {
+	el.daysRow.innerHTML = "";
+	invalidateDateCache();
+	var start = state.anchorDate;
+
+	for (var i = 0; i < state.visibleDays; i++) {
+		var d = start.add(i, "day");
+		var cell = document.createElement("div");
+		cell.className = "dayCell" + (d.isSame(dayjs(), "day") ? " today" : "");
+		cell.id = dayId(d);
+		cell.style.width = state.columnWidth + "px";
+		cell.style.minWidth = state.columnWidth + "px";
+		cell.innerHTML = '<div class="d">' + d.format("DD.MM") + " (" + ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"][d.day()] + ")</div>";
+		el.daysRow.appendChild(cell);
+	}
+	var totalWidth = state.visibleDays * state.columnWidth;
+	el.daysRow.style.width = totalWidth + "px";
+}
+
+function getVisibleRowRange() {
+	var rowHeight = 42;
+	var buffer = 3;
+
+	var scrollTop = el.rowsViewport.scrollTop;
+	var viewportHeight = el.rowsViewport.clientHeight;
+
+	var first = Math.max(
+		0,
+		Math.floor(scrollTop / rowHeight) - buffer
+	);
+
+	var last = Math.min(
+		apartments.length - 1,
+		Math.ceil((scrollTop + viewportHeight) / rowHeight) + buffer
+	);
+
+	return {
+		first: first,
+		last: last,
+		rowHeight: rowHeight
+	};
+}
+
+function getVisibleColumnRange() {
+	const scrollLeft = el.rowsViewport.scrollLeft;
+	const viewportWidth = el.rowsViewport.clientWidth;
+	const buffer = 3; // буферные колонки
+
+	const first = Math.max(0, Math.floor(scrollLeft / state.columnWidth) - buffer);
+	const last = Math.min(
+		state.visibleDays - 1,
+		Math.ceil((scrollLeft + viewportWidth) / state.columnWidth) + buffer
+	);
+
+	return {
+		first,
+		last
+	};
+}
+
+function renderVisibleRows() {
+	var range = getVisibleRowRange();
+
+	el.leftCol.innerHTML = "";
+	el.rowsContent.innerHTML = "";
+
+	el.leftCol.style.paddingTop = (range.first * range.rowHeight) + "px";
+	el.rowsContent.style.paddingTop = (range.first * range.rowHeight) + "px";
+
+	var fragL = document.createDocumentFragment();
+	var fragR = document.createDocumentFragment();
+
+	for (var i = range.first; i <= range.last; i++) {
+		var ap = apartments[i];
+
+		var lbl = document.createElement("div");
+		lbl.className = "rowLabel";
+		lbl.id = apartmentRowId(ap.id);
+		lbl.textContent = ap.name;
+		fragL.appendChild(lbl);
+
+		var row = buildGridRow(ap.id, apartmentRowId(ap.id));
+		fragR.appendChild(row);
+	}
+
+	el.leftCol.appendChild(fragL);
+	el.rowsContent.appendChild(fragR);
+
+}
+
+function buildGridRow(apartmentId, rowKey) {
+	var row = document.createElement("div");
+	row.className = "row";
+	row.setAttribute("data-apartment-id", String(apartmentId));
+	row.setAttribute("data-row-key", rowKey);
+
+	var inner = document.createElement("div");
+	inner.className = "rowInner";
+
+
+	var sel = document.createElement("div");
+	sel.className = "selection";
+	sel.setAttribute("data-row-key", rowKey);
+
+	for (var i = 0; i < state.visibleDays; i++) {
+		var d = state.anchorDate.add(i, "day");
+		var c = document.createElement("div");
+		c.className = "cell";
+		c.id = cellId(apartmentId, d);
+		c.setAttribute("data-apartment-id", String(apartmentId));
+		c.setAttribute("data-date", d.format("YYYY-MM-DD"));
+		c.setAttribute("data-index", String(i));
+		c.setAttribute("data-row-key", rowKey);
+		c.style.width = state.columnWidth + "px";
+		c.style.minWidth = state.columnWidth + "px";
+		inner.appendChild(c);
+	}
+
+	var bookingsLayer = document.createElement("div");
+	bookingsLayer.className = "bookingsLayer";
+
+	var statusLayer = document.createElement("div");
+	statusLayer.className = "statusLayer";
+
+	row.appendChild(inner); // ПЕРВЫМ - ячейки сетки
+	row.appendChild(sel); // ВТОРЫМ - выделение
+	row.appendChild(statusLayer); // ТРЕТИМ - слой статусов
+	row.appendChild(bookingsLayer); // ЧЕТВЕРТЫМ - слой бронирований
+
+	const totalWidth = state.visibleDays * state.columnWidth;
+	inner.style.width = totalWidth + "px";
+	return row;
+}
+
+function findRowByKey(rowKey) {
+	var rows = el.rowsContent.children;
+	for (var i = 0; i < rows.length; i++) {
+		if (rows[i].getAttribute("data-row-key") === rowKey) return rows[i];
+	}
+	return null;
+}
+//booking.js
+var intersectionCache = {};
+
+function checkIntersectionCached(start1, end1, start2, end2) {
+	var key = start1.valueOf() + '|' + end1.valueOf() + '|' + start2.valueOf() + '|' + end2.valueOf();
+
+	if (intersectionCache[key] === undefined) {
+		intersectionCache[key] = end1.isAfter(start2) && start1.isBefore(end2);
+	}
+
+	return intersectionCache[key];
+}
+
+function intersectsVisibleRange(item, range) {
+	var start = dayjs(item.start);
+	var end = dayjs(item.end);
+	return checkIntersectionCached(start, end, range.start, range.end); // ← Правильный порядок
+}
+
+function renderVisibleItems() {
+	var range = getVisibleRange();
+	var rows = getVisibleRowRange();
+
+	for (var i = rows.first; i <= rows.last; i++) {
+		var ap = apartments[i];
+		var row = findRowByKey(apartmentRowId(ap.id));
+		if (!row) continue;
+
+		var bookingLayer = row.querySelector(".bookingsLayer");
+		var statusLayer = row.querySelector(".statusLayer");
+
+		bookingLayer.innerHTML = "";
+		statusLayer.innerHTML = "";
+
+		var apBookings = bookingsByApartment[ap.id] || [];
+		var apStatuses = statusesByApartment[ap.id] || [];
+
+		for (var b = 0; b < apBookings.length; b++) {
+			var booking = apBookings[b];
+			if (!intersectsVisibleRange(booking, range)) continue;
+			var elB = createBookingEl(booking);
+			if (elB) bookingLayer.appendChild(elB);
+		}
+		for (var s = 0; s < apStatuses.length; s++) {
+			var status = apStatuses[s];
+			if (!intersectsVisibleRange(status, range)) continue;
+			var elS = createApartmentStatusEl(status);
+			if (elS) statusLayer.appendChild(elS);
+		}
+
+	}
+}
+
+function createBookingEl(b, forceRender = false) {
+	var start = dayjs(b.start);
+	var end = dayjs(b.end);
+
+	if (state.periodAuto && !forceRender) {
+		var range = getVisibleRange();
+		if (!intersectsVisibleRange(b, range)) {
+			return null;
+		}
+	}
+	var startDay = start.startOf("day");
+	var endDay = end.startOf("day").add(1, "day");
+
+	var gridStart = state.anchorDate.startOf("day");
+	var gridEnd = gridStart.add(state.visibleDays, "day");
+
+	if (startDay.isSameOrAfter(gridEnd) || endDay.isSameOrBefore(gridStart)) {
+		return null;
+	}
+
+	var leftDays = startDay.diff(gridStart, "day");
+	var rightDays = endDay.diff(gridStart, "day");
+
+	var clampedLeft = clamp(leftDays, 0, state.visibleDays);
+	var clampedRight = clamp(rightDays, 0, state.visibleDays);
+
+	var leftPx = clampedLeft * state.columnWidth;
+	var widthPx = Math.max(
+		state.columnWidth,
+		(clampedRight - clampedLeft) * state.columnWidth
+	);
+
+	var offset = 4;
+	var halfOffset = state.columnWidth / 2;
+
+	var isRealStartVisible = startDay.isSameOrAfter(gridStart);
+	var isRealEndVisible = endDay.isSameOrBefore(gridEnd);
+
+	/* ЛЕВЫЙ КРАЙ */
+	if (isRealStartVisible && clampedLeft >= 0 && clampedLeft < state.visibleDays) {
+		leftPx += halfOffset;
+		widthPx -= halfOffset;
+	}
+
+	/* ПРАВЫЙ КРАЙ */
+	if (isRealEndVisible && clampedRight > 0 && clampedRight <= state.visibleDays) {
+		widthPx -= halfOffset;
+	}
+
+	if (clampedRight - clampedLeft > 1) {
+		leftPx += offset;
+		widthPx -= offset * 2;
+	}
+
+	/* ===============================
+	   ВНЕШНИЙ КОНТЕЙНЕР (НЕ РЕЖЕТ)
+	=============================== */
+	var wrap = document.createElement("div");
+	wrap.className = "booking-wrap";
+	wrap.style.left = leftPx + "px";
+	wrap.style.width = widthPx + "px";
+	wrap.style.zIndex = "2";
+	wrap.style.position = "absolute";
+	wrap.setAttribute("data-booking-id", String(b.id));
+	wrap.setAttribute("data-date-create", String(b.dateCreate || "0"));
+	wrap.setAttribute("data-apartment-id", String(b.apartmentId));
+
+	/* ===============================
+	   САМА ПОЛОСКА БРОНИ (РЕЖЕТ ТЕКСТ)
+	=============================== */
+	var div = document.createElement("div");
+	div.className = "booking";
+	div.id = bookingIdStr(b);
+	div.setAttribute("data-booking-id", String(b.id));
+	div.setAttribute("data-date-create", String(b.dateCreate || "0"));
+	div.setAttribute("data-apartment-id", String(b.apartmentId));
+
+	var color = statusColors[b.status] || "#D9E6FF";
+	div.style.background = color;
+
+	var label = b.guestName || ("Бронь #" + b.id);
+
+	var textSpan = document.createElement("span");
+	textSpan.className = "booking-label";
+	textSpan.textContent =
+		label + " · " +
+		getFormattedDate(start, "DD.MM") + "–" + getFormattedDate(end, "DD.MM");
+
+	div.appendChild(textSpan);
+	wrap.appendChild(div);
+
+	/* ===============================
+	   API-БЕЙДЖ (НЕ ВНУТРИ booking!)
+	=============================== */
+	if (b.checkInAggregator === true) {
+		var apiBadge = document.createElement("span");
+		apiBadge.className = "api-badge";
+		apiBadge.textContent = "api";
+		wrap.appendChild(apiBadge);
+		div.setAttribute('data-locked', 'true');
+	}
+
+	/* ===============================
+	   ОБРАБОТЧИКИ
+	=============================== */
+	wrap.onmousedown = function(ev) {
+		//ev.stopPropagation(); // ДОБАВИТЬ
+		onBookingMouseDown(ev, b);
+	};
+
+	wrap.onmousemove = function(ev) {
+		// НЕ показываем подсказку, если уже есть зафиксированная подсказка
+		if (fixedPopover.isFixed) return;
+
+		if (!selectedItem.element || selectedItem.id !== b.id) {
+			showBookingPopover(ev, b, false);
+		}
+	};
+
+	wrap.onmouseleave = hidePopover;
+
+	wrap.oncontextmenu = function(ev) {
+		ev.preventDefault();
+		ev.stopPropagation();
+		selectItem("booking", b.id, wrap, ev);
+	};
+
+	wrap.ondblclick = function() {
+		dispatch("openDocument", b);
+	};
+
+	wrap.onclick = function(ev) {
+		ev.preventDefault();
+		ev.stopPropagation();
+		ev.stopImmediatePropagation(); // ДОБАВИТЬ
+		selectItem("booking", b.id, wrap, ev);
+	};
+	wrap.addEventListener('click', function(ev) {
+		ev.preventDefault();
+		ev.stopPropagation();
+		ev.stopImmediatePropagation();
+
+		selectItem("booking", b.id, wrap, ev); // ← ev передается здесь!
+	});
+
+	div.onclick = function(ev) {
+		ev.preventDefault();
+		ev.stopPropagation();
+		ev.stopImmediatePropagation();
+		selectItem("booking", b.id, wrap, ev);
+	};
+
+	return wrap;
+}
+
+
+function createApartmentStatusEl(status, forceRender = false) {
+	var start = dayjs(status.start);
+	var end = dayjs(status.end);
+	if (state.periodAuto && !forceRender) {
+		var range = getVisibleRange();
+		if (!intersectsVisibleRange(status, range)) {
+			return null;
+		}
+	}
+	var startDay = start.startOf("day");
+	var endDay = end.startOf("day").add(1, "day");
+	var gridStart = state.anchorDate.startOf("day");
+	var gridEnd = gridStart.add(state.visibleDays, "day");
+	if (startDay.isSameOrAfter(gridEnd) || endDay.isSameOrBefore(gridStart)) {
+		return null;
+	}
+	var leftDays = startDay.diff(gridStart, "day");
+	var rightDays = endDay.diff(gridStart, "day");
+	var clampedLeft = clamp(leftDays, 0, state.visibleDays);
+	var clampedRight = clamp(rightDays, 0, state.visibleDays);
+	var leftPx = clampedLeft * state.columnWidth;
+	var widthPx = Math.max(state.columnWidth, (clampedRight - clampedLeft) * state.columnWidth);
+	// Проверяем, начинается ли статус с начала дня
+	var isStartOfDay = start.hour() === 0 && start.minute() === 0;
+	// Проверяем, заканчивается ли статус в конце дня
+	var isEndOfDay = end.hour() === 23 && end.minute() === 59;
+	// Смещение для визуального разделения
+	var offset = 4; // отступ в пикселях
+	var halfOffset = state.columnWidth / 2; // половина ширины ячейки
+	// Корректируем левую позицию и ширину
+	var isRealStartVisible = startDay.isSameOrAfter(gridStart);
+	var isRealEndVisible = endDay.isSameOrBefore(gridEnd);
+
+	/* ЛЕВЫЙ КРАЙ */
+	if (isRealStartVisible && clampedLeft >= 0 && clampedLeft < state.visibleDays) {
+		leftPx += halfOffset;
+		widthPx -= halfOffset;
+	}
+
+	/* ПРАВЫЙ КРАЙ */
+	if (isRealEndVisible && clampedRight > 0 && clampedRight <= state.visibleDays) {
+		widthPx -= halfOffset;
+	}
+	// Добавляем небольшие отступы для визуального разделения
+	if (clampedRight - clampedLeft > 1) {
+		leftPx += offset;
+		widthPx -= offset * 2;
+	}
+	var div = document.createElement("div");
+	div.className = "apartment-status";
+	div.id = apartmentStatusIdStr(status);
+	div.setAttribute("data-status-id", String(status.id));
+	div.setAttribute("data-date-create", String(status.dateCreate || "0"));
+	div.setAttribute("data-apartment-id", String(status.apartmentId));
+	div.setAttribute("data-status-type", status.statusType || "other");
+	var color = statusColors[status.status] || "#F0F0F0";
+	div.style.background = color;
+	div.style.opacity = "0.6"; // полупрозрачный фон
+	div.style.left = leftPx + "px";
+	div.style.width = widthPx + "px";
+	div.style.zIndex = "1"; // под бронированиями
+	var label = status.reason || status.statusType || "Статус";
+	div.textContent = label + " · " + start.format("DD.MM") + "–" + end.format("DD.MM");
+	// Свои обработчики для статусов
+	div.onmousemove = function(ev) {
+		// НЕ показываем подсказку, если уже есть зафиксированная подсказка
+		if (fixedPopover.isFixed) return;
+		// Показываем подсказку только если элемент НЕ выделен
+		if (!selectedItem.element || selectedItem.id !== status.id) {
+			showStatusPopover(ev, status, false); // false - не фиксированная позиция
+		}
+		// Если элемент выделен - ничего не делаем, подсказка уже зафиксирована
+	};
+	div.onmouseleave = hidePopover;
+	div.oncontextmenu = function(ev) {
+		ev.preventDefault();
+		ev.stopPropagation(); // Останавливаем всплытие
+		selectItem("status", status.id, div, ev);
+	};
+	div.ondblclick = function() {
+		dispatch('openDocument', status);
+	};
+	div.onmousedown = function(ev) {
+		onStatusMouseDown(ev, status);
+	};
+	div.onclick = function(ev) {
+		ev.preventDefault(); // Добавьте это!
+		ev.stopPropagation(); // Останавливаем всплытие, чтобы не срабатывали другие обработчики
+		selectItem("status", status.id, div, ev); // Передаем ev для фиксации позиции
+	};
+	return div;
+};
+// drag-and-drop.js
+function checkItemCollision(itemId, itemType, apartmentId, newStart, newEnd) {
+
+	// Проверяем ВСЕ бронирования (независимо от типа)
+	for (var i = 0; i < bookings.length; i++) {
+		var booking = bookings[i];
+		if (String(booking.id) === String(itemId) && itemType === "booking") continue;
+		if (booking.apartmentId !== apartmentId) continue;
+
+		var bookingStart = dayjs(booking.start);
+		var bookingEnd = dayjs(booking.end);
+
+		if (newStart.isBefore(bookingEnd) && newEnd.isAfter(bookingStart)) return true;
+	}
+
+	// Проверяем ВСЕ статусы (независимо от типа)
+	for (var j = 0; j < apartmentStatuses.length; j++) {
+		var status = apartmentStatuses[j];
+		if (String(status.id) === String(itemId) && itemType === "status") continue;
+		if (status.apartmentId !== apartmentId) continue;
+
+		var statusStart = dayjs(status.start);
+		var statusEnd = dayjs(status.end);
+
+		if (newStart.isBefore(statusEnd) && newEnd.isAfter(statusStart)) return true;
+	}
+
+	return false;
+}
+
+function onBookingMouseDown(ev, booking) {
+	if (ev.button !== 0) return;
+	if (booking.checkInAggregator === true) {
+		ev.preventDefault();
+		return;
+	} // Запрет перетаскивания если checkInAggregator = true
+	deselectItem(); // Снимаем выделение при начале перетаскивания
+	hidePopover();
+
+	var bookingEl = ev.currentTarget;
+	var oldStartDay = dayjs(booking.start).startOf("day");
+	var oldEndDay = dayjs(booking.end).startOf("day");
+	var durationDays = Math.max(
+		1,
+		oldEndDay.diff(oldStartDay, "day") + 1
+	);
+	// Получаем текущее отображаемое положение элемента
+	var visibleLeft = parseFloat(bookingEl.style.left) || 0;
+	var visibleWidth = parseFloat(bookingEl.style.width) || state.columnWidth;
+
+	// Вычисляем индекс дня от начала видимой области
+	var startDayIndex = Math.floor(visibleLeft / state.columnWidth);
+
+	// Вычисляем фактическую дату начала отображаемой части
+	var visibleStartDate = state.anchorDate.add(startDayIndex, "day");
+
+	// Определяем, сколько дней элемента не видно слева
+	var daysHiddenLeft = 0;
+	if (oldStartDay.isBefore(visibleStartDate)) {
+		daysHiddenLeft = visibleStartDate.diff(oldStartDay, "day");
+	}
+
+	// Вычисляем на какой день внутри видимой части кликнули
+	var rect = bookingEl.getBoundingClientRect();
+	var clickOffsetX = ev.clientX - rect.left;
+	var clickedVisibleDayOffset = Math.floor(clickOffsetX / state.columnWidth);
+
+	// Полное смещение от фактического начала элемента до точки клика
+	var clickedDayOffset = daysHiddenLeft + clickedVisibleDayOffset;
+	clickedDayOffset = clamp(clickedDayOffset, 0, durationDays - 1);
+
+	// Сохраняем оригинальные стили для восстановления
+	var originalStyles = {
+		left: bookingEl.style.left,
+		width: bookingEl.style.width,
+		opacity: bookingEl.style.opacity
+	};
+
+	// Инициализируем dragState без создания dragEl
+	dragState = {
+		itemId: booking.id,
+		dateCreate: booking.dateCreate,
+		item: booking,
+		itemEl: bookingEl,
+		dragEl: null, // Пока null
+		itemType: "booking",
+		originalStartDate: oldStartDay,
+		durationDays: durationDays,
+		startX: ev.clientX,
+		startY: ev.clientY,
+		currentApartmentId: booking.apartmentId,
+		isValid: true,
+		hasMoved: false,
+		clickedDayOffset: clickedDayOffset,
+		originalStyles: originalStyles,
+		dragOffsetX: ev.clientX - (rect.left - (daysHiddenLeft * state.columnWidth)),
+		rect: rect,
+		originalStartTime: dayjs(booking.start).format("HH:mm:ss"),
+		originalEndTime: dayjs(booking.end).format("HH:mm:ss"),
+		visibleWidth: visibleWidth
+	};
+
+	ev.preventDefault();
+}
+
+function onStatusMouseDown(ev, statusItem) {
+	if (ev.button !== 0) return;
+	deselectItem(); // Снимаем выделение при начале перетаскивания
+	hidePopover();
+
+	var statusEl = ev.currentTarget;
+	var oldStartDay = dayjs(statusItem.start).startOf("day");
+	var oldEndDay = dayjs(statusItem.end).startOf("day");
+	var durationDays = Math.max(
+		1,
+		oldEndDay.diff(oldStartDay, "day") + 1
+	);
+	// Получаем текущее отображаемое положение элемента
+	var visibleLeft = parseFloat(statusEl.style.left) || 0;
+	var visibleWidth = parseFloat(statusEl.style.width) || state.columnWidth;
+
+	// Вычисляем индекс дня от начала видимой области
+	var startDayIndex = Math.floor(visibleLeft / state.columnWidth);
+
+	// Вычисляем фактическую дату начала отображаемой части
+	var visibleStartDate = state.anchorDate.add(startDayIndex, "day");
+
+	// Определяем, сколько дней элемента не видно слева
+	var daysHiddenLeft = 0;
+	if (oldStartDay.isBefore(visibleStartDate)) {
+		daysHiddenLeft = visibleStartDate.diff(oldStartDay, "day");
+	}
+
+	// Вычисляем на какой день внутри видимой части кликнули
+	var rect = statusEl.getBoundingClientRect();
+	var clickOffsetX = ev.clientX - rect.left;
+	var clickedVisibleDayOffset = Math.floor(clickOffsetX / state.columnWidth);
+
+	// Полное смещение от фактического начала элемента до точки клика
+	var clickedDayOffset = daysHiddenLeft + clickedVisibleDayOffset;
+	clickedDayOffset = clamp(clickedDayOffset, 0, durationDays - 1);
+
+	// Сохраняем оригинальные стили для восстановления
+	var originalStyles = {
+		left: statusEl.style.left,
+		width: statusEl.style.width,
+		opacity: statusEl.style.opacity
+	};
+
+	// Инициализируем dragState без создания dragEl
+	dragState = {
+		itemId: statusItem.id,
+		dateCreate: statusItem.dateCreate,
+		item: statusItem,
+		itemEl: statusEl,
+		dragEl: null, // Пока null
+		itemType: "status",
+		originalStartDate: oldStartDay,
+		durationDays: durationDays,
+		startX: ev.clientX,
+		startY: ev.clientY,
+		currentApartmentId: statusItem.apartmentId,
+		isValid: true,
+		hasMoved: false,
+		clickedDayOffset: clickedDayOffset,
+		originalStyles: originalStyles,
+		dragOffsetX: ev.clientX - (rect.left - (daysHiddenLeft * state.columnWidth)),
+		rect: rect,
+		originalStartTime: dayjs(statusItem.start).format("HH:mm:ss"),
+		originalEndTime: dayjs(statusItem.end).format("HH:mm:ss"),
+		visibleWidth: visibleWidth
+	};
+
+	ev.preventDefault();
+}
+
+function onDocumentMouseMove(ev) {
+	if (!dragState) return;
+
+	var deltaX = ev.clientX - dragState.startX;
+	var deltaY = ev.clientY - dragState.startY;
+	var movement = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+	if (movement > 3) {
+		dragState.hasMoved = true;
+	}
+
+	if (!dragState.hasMoved) return;
+
+	if (dragState.itemType === "booking") {
+		hidePopover();
+	} else {
+		hidePopover();
+	}
+
+	// Если dragEl ещё не создан, создаём его
+	if (!dragState.dragEl) {
+		var dragEl = document.createElement("div");
+		dragEl.className = "" + (dragState.itemType === "booking" ? "booking" : "apartment-status") + " dragging";
+		dragEl.textContent = dragState.itemEl.textContent;
+		dragEl.style.background = dragState.itemEl.style.background;
+		dragEl.style.color = dragState.itemEl.style.color;
+		dragEl.style.zIndex = "1000";
+		dragEl.style.position = "absolute";
+		dragEl.style.pointerEvents = "none";
+
+		if (dragState.itemType === "status") {
+			dragEl.style.opacity = dragState.itemEl.style.opacity;
+		}
+
+		dragEl.style.width = dragState.visibleWidth + "px";
+		dragEl.style.height = dragState.itemEl.offsetHeight + "px";
+		dragEl.style.left = dragState.rect.left + "px";
+		dragEl.style.top = dragState.rect.top + "px";
+
+		document.body.appendChild(dragEl);
+		dragState.dragEl = dragEl;
+
+		// Полупрозрачность оригинального элемента
+		dragState.itemEl.style.opacity = "0.3";
+	}
+
+	// Обновляем позицию временного элемента с шаговым перемещением
+	var deltaX = ev.clientX - dragState.startX;
+	var snappedDeltaDays = Math.round(deltaX / state.columnWidth);
+	var snappedDeltaX = snappedDeltaDays * state.columnWidth;
+
+	dragState.dragEl.style.left = (dragState.rect.left + snappedDeltaX) + "px";
+
+	var rowsRect = el.rowsContent.getBoundingClientRect();
+	var relativeY = ev.clientY - rowsRect.top + el.rowsViewport.scrollTop;
+	var rowHeight = 42;
+	var rowIndex = Math.floor(relativeY / rowHeight);
+	var clampedRowIndex = clamp(rowIndex, 0, apartments.length - 1);
+	var newTop =
+		rowsRect.top +
+		clampedRowIndex * rowHeight -
+		el.rowsViewport.scrollTop;
+
+	dragState.dragEl.style.top = newTop + "px";
+	var targetApartmentId = apartments[clampedRowIndex].id;
+
+	// Рассчитываем новую дату начала на основе смещения мыши
+	var deltaDays = snappedDeltaDays;
+	var newStartDay = dragState.originalStartDate.add(deltaDays, "day");
+	var newStart = dayjs(newStartDay.format("YYYY-MM-DD") + "T" + dragState.originalStartTime);
+	var newEndDay = newStartDay.add(dragState.durationDays - 1, "day");
+	var newEnd = dayjs(newEndDay.format("YYYY-MM-DD") + "T" + dragState.originalEndTime);
+
+	var hasCollision = checkItemCollision(
+		dragState.itemId,
+		dragState.itemType,
+		targetApartmentId,
+		newStart,
+		newEnd
+	);
+
+	dragState.currentApartmentId = targetApartmentId;
+	dragState.isValid = !hasCollision;
+
+	// Обновляем внешний вид временного элемента
+	dragState.dragEl.className = dragState.dragEl.className.replace(" drag-invalid", "");
+	if (hasCollision) {
+		dragState.dragEl.className += " drag-invalid";
+	}
+}
+
+function onDocumentMouseUp(ev) {
+	if (!dragState) return;
+
+	var ds = dragState;
+
+	// Удаляем временный элемент
+	if (ds.dragEl && ds.dragEl.parentNode) {
+		ds.dragEl.parentNode.removeChild(ds.dragEl);
+	}
+
+	// Восстанавливаем оригинальный элемент
+	if (ds.itemEl) {
+		ds.itemEl.style.left = ds.originalStyles.left;
+		ds.itemEl.style.width = ds.originalStyles.width;
+		ds.itemEl.style.opacity = ds.originalStyles.opacity || "";
+		ds.itemEl.className = ds.itemEl.className.replace(" dragging", "").replace(" drag-invalid", "");
+	}
+
+	if (ds.hasMoved && ds.isValid) {
+		var deltaDays = Math.round((ev.clientX - ds.startX) / state.columnWidth);
+
+		var newStartDay = ds.originalStartDate.add(deltaDays, "day");
+		var newEndDay = newStartDay.add(ds.durationDays - 1, "day");
+
+		pendingAction = {
+			type: ds.itemType, // "booking" | "status"
+			id: ds.itemId,
+			dateCreate: ds.dateCreate,
+			oldState: structuredClone(ds.item),
+			newState: {
+				apartmentId: ds.currentApartmentId,
+				start: newStartDay.format("YYYY-MM-DD") + "T" + dayjs(ds.item.start).format("HH:mm:ss"),
+				end: newEndDay.format("YYYY-MM-DD") + "T" + dayjs(ds.item.end).format("HH:mm:ss")
+			}
+		};
+
+		dispatch(ds.itemType + "MoveRequest", pendingAction);
+	} else {
+		// Если просто кликнули (не перетащили) - выделяем элемент
+		if (!ds.hasMoved && selectedItem.element !== ds.itemEl) {
+			selectItem(ds.itemType, ds.itemId, ds.itemEl);
+		}
+	}
+	dragState = null;
+}
+
+document.addEventListener("mousemove", onDocumentMouseMove);
+document.addEventListener("mouseup", onDocumentMouseUp);
+// selection.js
+var selectionHandlersAttached = false;
+
+function attachSelectionHandlersOnce() {
+	if (selectionHandlersAttached) return;
+	selectionHandlersAttached = true;
+
+	el.rowsContent.addEventListener("mousedown", function(ev) {
+		if (ev.button !== 0) return;
+		if (findParentWithClass(ev.target, "booking-wrap")) return;
+
+		var cell = findParentWithClass(ev.target, "cell");
+		if (!cell) return;
+
+		var rowKey = cell.getAttribute("data-row-key");
+		var apartmentId = Number(cell.getAttribute("data-apartment-id"));
+		var startIndex = Number(cell.getAttribute("data-index"));
+
+		state.selecting = {
+			apartmentId: apartmentId,
+			rowKey: rowKey,
+			startIndex: startIndex,
+			endIndex: startIndex
+		};
+
+		updateSelectionOverlay();
+		ev.preventDefault();
+	});
+
+	window.addEventListener("mousemove", function(ev) {
+		if (!state.selecting) return;
+		var cell = findParentWithClass(ev.target, "cell");
+		if (!cell) return;
+		if (cell.getAttribute("data-row-key") !== state.selecting.rowKey) return;
+
+		state.selecting.endIndex = Number(cell.getAttribute("data-index"));
+		updateSelectionOverlay();
+	});
+
+	window.addEventListener("mouseup", function() {
+		if (!state.selecting) return;
+		if (pendingAction) return;
+
+		var sel = state.selecting;
+		var a = Math.min(sel.startIndex, sel.endIndex);
+		var b = Math.max(sel.startIndex, sel.endIndex);
+
+		// Проверяем, что выделено более одного дня
+		var selectedDays = Math.abs(b - a) + 1;
+		if (selectedDays < 2) {
+			// Если выделен только один день - просто очищаем выделение
+			clearSelectionOverlay();
+			state.selecting = null;
+			return;
+		}
+		var startDate = state.anchorDate.add(a, "day")
+			.format("YYYY-MM-DD");
+		var endDate = state.anchorDate.add(b + 1, "day")
+			.format("YYYY-MM-DD");
+
+		clearSelectionOverlay();
+
+		pendingAction = {
+			type: "selection",
+			apartmentId: sel.apartmentId,
+			startDate: startDate,
+			endDate: endDate
+		};
+
+		dispatch("createDocumentRequest", pendingAction);
+	});
+}
+
+function updateSelectionOverlay() {
+	var sel = state.selecting;
+	if (!sel) return;
+
+	var row = findRowByKey(sel.rowKey);
+	if (!row) return;
+
+	var overlay = row.querySelector(".selection");
+
+	var a = Math.min(sel.startIndex, sel.endIndex);
+	var b = Math.max(sel.startIndex, sel.endIndex);
+
+	overlay.style.display = "block";
+	overlay.style.left = (a * state.columnWidth + 2) + "px";
+	overlay.style.width = ((b - a + 1) * state.columnWidth - 4) + "px";
+}
+
+function clearSelectionOverlay() {
+	var selections = el.rowsContent.querySelectorAll(".selection");
+	for (var i = 0; i < selections.length; i++) {
+		selections[i].style.display = "none";
+	}
+}
+
+function finishSelection() {
+	clearSelectionOverlay();
+	state.selecting = null;
+}
+//ui_components.js
+function showBookingPopover(ev, b, isFixed = false) {
+	if (isFixed) {
+		fixedPopover.isFixed = true;
+		fixedPopover.type = "booking";
+		fixedPopover.id = b.id;
+	}
+	var p = el.infoPopover;
+	p.style.display = 'block';
+	var ap = getApartmentById(b.apartmentId);
+	var apartmentName = ap ? ap.name : b.apartmentId;
+	var bookingHtml = '<div class="kv">' + '<div class="kv-row"><div class="kv-label">' + 'Квартира' + '</div><div class="kv-value">' + apartmentName + '</div></div>' + '<div class="kv-row"><div class="kv-label">' + 'Источник' + '</div><div class="kv-value">' + safe(b.aggregator) + '</div></div>' + '<div class="kv-row"><div class="kv-label">' + 'Гость' + '</div><div class="kv-value">' + safe(b.guestName) + '</div></div>' + '<div class="kv-row"><div class="kv-label">' + 'Даты' + '</div><div class="kv-value">' + dayjs(b.start).format('DD.MM.YYYY HH:mm') + ' → ' + dayjs(b.end).format('DD.MM.YYYY HH:mm') + '</div></div>' + '<div class="kv-row"><div class="kv-label">' + 'Статус' + '</div><div class="kv-value">' + safe(b.status) + '</div></div>' + '</div>';
+	p.innerHTML = '<div class="title">Бронирование #' + b.id + '</div>' + bookingHtml;
+	var buttonsDiv = document.createElement('div');
+	buttonsDiv.className = 'popover-buttons';
+	var btnOpen = document.createElement('button');
+	btnOpen.className = 'btn-open';
+	btnOpen.textContent = 'Открыть';
+	btnOpen.addEventListener('click', function() {
+		dispatch('openDocument', b);
+	});
+	var btnCopy = document.createElement('button');
+	btnCopy.className = 'btn-copy';
+	btnCopy.textContent = 'Скопировать';
+	btnCopy.addEventListener('click', function() {
+		dispatch('copyDocument', b);
+	});
+	buttonsDiv.appendChild(btnOpen);
+	buttonsDiv.appendChild(btnCopy);
+	p.appendChild(buttonsDiv);
+	if (!isFixed) {
+		var x = clamp(ev.clientX + 16, 8, window.innerWidth - 380);
+		var y = clamp(ev.clientY + 16, 8, window.innerHeight - 220);
+		p.style.left = x + 'px';
+		p.style.top = y + 'px';
+		fixedPopover.position = {
+			x: x,
+			y: y
+		};
+	} else {
+		// Для фиксированной используем уже установленную позицию
+		p.style.left = fixedPopover.position.x + 'px';
+		p.style.top = fixedPopover.position.y + 'px';
+	}
+	p.onmousedown = function(e) {
+		e.stopPropagation();
+	};
+}
+
+function showStatusPopover(ev, status, isFixed = false) {
+	if (isFixed) {
+		fixedPopover.isFixed = true;
+		fixedPopover.type = "status";
+		fixedPopover.id = status.id;
+	}
+	var p = el.infoPopover;
+	p.style.display = 'block';
+	var ap = apartments.find(a => a.id === status.apartmentId);
+	var apartmentName = ap ? ap.name : status.apartmentId;
+	var statusHtml = '<div class="kv">' + '<div class="kv-row"><div class="kv-label">' + 'Квартира' + '</div><div class="kv-value">' + apartmentName + '</div></div>' + '<div class="kv-row"><div class="kv-label">' + 'Даты' + '</div><div class="kv-value">' + dayjs(status.start).format('DD.MM.YYYY HH:mm') + ' → ' + dayjs(status.end).format('DD.MM.YYYY HH:mm') + '</div></div>' + '<div class="kv-row"><div class="kv-label">' + 'Статус' + '</div><div class="kv-value">' + safe(status.statusType) + '</div></div>' + '<div class="kv-row"><div class="kv-label">' + 'Причина' + '</div><div class="kv-value">' + safe(status.reason) + '</div></div>' + '</div>';
+	p.innerHTML = '<div class="title">Установка статуса квартиры #' + status.id + '</div>' + statusHtml;
+	var buttonsDiv = document.createElement('div');
+	buttonsDiv.className = 'popover-buttons';
+	var btnOpen = document.createElement('button');
+	btnOpen.className = 'btn-open';
+	btnOpen.textContent = 'Открыть';
+	btnOpen.addEventListener('click', function() {
+		dispatch('openDocument', status);
+	});
+	var btnCopy = document.createElement('button');
+	btnCopy.className = 'btn-copy';
+	btnCopy.textContent = 'Скопировать';
+	btnCopy.addEventListener('click', function() {
+		dispatch('copyDocument', status);
+	});
+	buttonsDiv.appendChild(btnOpen);
+	buttonsDiv.appendChild(btnCopy);
+	p.appendChild(buttonsDiv);
+	if (!isFixed) {
+		var x = clamp(ev.clientX + 16, 8, window.innerWidth - 380);
+		var y = clamp(ev.clientY + 16, 8, window.innerHeight - 220);
+		p.style.left = x + 'px';
+		p.style.top = y + 'px';
+		fixedPopover.position = {
+			x: x,
+			y: y
+		};
+	} else {
+		// Для фиксированной используем уже установленную позицию
+		p.style.left = fixedPopover.position.x + 'px';
+		p.style.top = fixedPopover.position.y + 'px';
+	}
+	p.onmousedown = function(e) {
+		e.stopPropagation();
+	};
+}
+
+function hidePopover() {
+	// Не скрываем подсказку, если она зафиксирована
+	if (!fixedPopover.isFixed) {
+		el.infoPopover.style.display = 'none';
+	}
+}
+// timeline.js
+function renderNowLine() {
+	var now = dayjs();
+	var start = state.anchorDate.startOf("day");
+	var idx = now.startOf("day").diff(start, "day");
+
+	if (idx < 0 || idx >= state.visibleDays) {
+		el.nowLine.style.display = "none";
+		return;
+	}
+
+	var minutes = now.diff(now.startOf("day"), "minute");
+	var offset = minutes / (24 * 60);
+	var left = idx * state.columnWidth + offset * state.columnWidth;
+
+	el.nowLine.style.display = "block";
+	el.nowLine.style.left = (left - el.rowsViewport.scrollLeft) + "px";
+}
+
+setInterval(renderNowLine, 600000); // каждые 10 минут
+
+function syncHeaderScroll() {
+	el.daysViewport.scrollLeft = el.rowsViewport.scrollLeft;
+	renderNowLine();
+}
+// 1c-api.js
+window.GoToDate = function(dateStr) {
+	state.anchorDate = dayjs(dateStr).startOf("day");
+	renderAll();
+	return {
+		success: true
+	};
+};
+
+window.PrevDay = function() {
+	state.anchorDate = state.anchorDate.add(-1, "day");
+	renderAll();
+	return {
+		success: true
+	};
+};
+
+window.NextDay = function() {
+	state.anchorDate = state.anchorDate.add(1, "day");
+	renderAll();
+	return {
+		success: true
+	};
+};
+
+window.PrevWeek = function() {
+	state.anchorDate = state.anchorDate.add(-7, "day");
+	renderAll();
+	return {
+		success: true
+	};
+};
+
+window.NextWeek = function() {
+	state.anchorDate = state.anchorDate.add(7, "day");
+	renderAll();
+	return {
+		success: true
+	};
+};
+
+window.GoToToday = function() {
+	state.anchorDate = dayjs().startOf("day");
+	renderAll();
+	return {
+		success: true
+	};
+};
+
+window.SetScale = function(width) {
+	if (typeof width !== "number" || width < 72 || width > 140) {
+		return {
+			success: false,
+			error: "Ширина столбца должна быть от 72 до 140"
+		};
+	}
+	state.columnWidth = width;
+	renderAll();
+	return {
+		success: true
+	};
+};
+
+window.SetPeriodAuto = function(isAuto) {
+	state.periodAuto = !!isAuto;
+	clearAllCaches(); // FIX: Очистка при смене режима
+	onPeriodChanged();
+	applyScrollMode();
+	renderAll();
+	return {
+		success: true
+	};
+};
+
+window.SetPeriod = function(fromStr, toStr) {
+	var from = dayjs(fromStr);
+	var to = dayjs(toStr);
+	if (!from.isValid() || !to.isValid()) {
+		return {
+			success: false,
+			error: "Ожидается формат YYYY-MM-DD"
+		};
+	}
+	state.periodAuto = false;
+	state.periodFrom = from.startOf("day");
+	state.periodTo = to.startOf("day");
+	clearAllCaches(); // FIX: Очистка кэшей
+	onPeriodChanged(); // ДОБАВИТЬ
+	renderAll();
+	return {
+		success: true
+	};
+};
+
+window.SetTariffMode = function(enabled) {
+	state.tariffMode = !!enabled;
+	renderAll();
+	return {
+		success: true
+	};
+};
+
+// Методы для работы с данными
+window.updateApartments = function(jsonString) {
+	try {
+		apartments = JSON.parse(jsonString);
+		apartmentCache = {};
+		rebuildIndexes();
+		renderAll();
+		
+		checkAndRequestData(true);
+		
+		return {
+			success: true,
+			count: apartments.length
+		};
+	} catch (e) {
+		console.error("Ошибка парсинга JSON квартир:", e);
+		return {
+			success: false,
+			error: e.message
+		};
+	}
+};
+
+window.updateApartmentStatuses = function(jsonString) {
+	try {
+		apartmentStatuses = JSON.parse(jsonString);
+		rebuildIndexes();
+		renderVisibleItems();
+
+		return {
+			success: true,
+			count: apartmentStatuses.length
+		};
+	} catch (e) {
+		console.error("Ошибка парсинга JSON статусов:", e);
+		return {
+			success: false,
+			error: e.message
+		};
+	}
+};
+window.updateBookings = function(jsonString) {
+	try {
+		bookings = JSON.parse(jsonString);
+		rebuildIndexes();
+		renderVisibleItems();
+
+
+		return {
+			success: true,
+			count: bookings.length
+		};
+	} catch (e) {
+		console.error("Ошибка парсинга JSON бронирований:", e);
+		return {
+			success: false,
+			error: e.message
+		};
+	}
+};
+
+window.setStatusColors = function(jsonString) {
+	if (typeof jsonString !== 'string' || !jsonString.trim()) {
+		return {
+			success: false,
+			error: 'Ожидается непустая JSON-строка'
+		};
+	}
+
+	try {
+		const colors = JSON.parse(jsonString);
+
+		if (typeof colors !== 'object' || colors === null) {
+			return {
+				success: false,
+				error: 'JSON должен быть объектом'
+			};
+		}
+
+		statusColors = {};
+
+		for (const status in colors) {
+			if (colors.hasOwnProperty(status)) {
+				const color = colors[status];
+				if (typeof color === 'string' && /^#[0-9A-Fa-f]{6}$/i.test(color)) {
+					statusColors[status] = color;
+				} else {
+					console.warn(`Пропущен некорректный цвет для "${status}": ${color}`);
+				}
+			}
+		}
+
+		renderVisibleItems();
+
+		return {
+			success: true,
+			count: Object.keys(statusColors).length
+		};
+	} catch (e) {
+		console.error('Ошибка парсинга JSON цветов статусов:', e);
+		return {
+			success: false,
+			error: 'Невалидный JSON: ' + e.message
+		};
+	}
+};
+window.confirmPendingAction = function() {
+	if (!pendingAction) return {
+		success: false
+	};
+
+	if (pendingAction.type === "selection") {
+		finishSelection(false);
+	} else {
+		applyPendingAction(pendingAction);
+	}
+
+	pendingAction = null;
+	renderVisibleItems();
+	return {
+		success: true
+	};
+};
+
+window.cancelPendingAction = function() {
+	if (!pendingAction) return {
+		success: false
+	};
+
+	if (pendingAction.type === "selection") {
+		finishSelection(true);
+	} else {
+		rollbackPendingAction(pendingAction);
+	}
+
+	pendingAction = null;
+	renderVisibleItems();
+	return {
+		success: true
+	};
+};
+
+window.renderNowLinefrom1C = function() {
+	renderNowLine()
+};
+
+function rebuildIndexes() {
+	bookingsByApartment = {};
+	statusesByApartment = {};
+
+	for (var i = 0; i < bookings.length; i++) {
+		var b = bookings[i];
+		if (!bookingsByApartment[b.apartmentId]) bookingsByApartment[b.apartmentId] = [];
+		bookingsByApartment[b.apartmentId].push(b);
+	}
+
+	for (var j = 0; j < apartmentStatuses.length; j++) {
+		var s = apartmentStatuses[j];
+		if (!statusesByApartment[s.apartmentId]) statusesByApartment[s.apartmentId] = [];
+		statusesByApartment[s.apartmentId].push(s);
+	}
+
+}
+
+window.requestDocumentsForRange = function(startDate, endDate, apartmentIds) {
+	dispatch("loadDataRequest", {
+		startDate,
+		endDate,
+		apartmentIds
+	});
+
+
+
+};
+
+
+window.onDocumentsLoaded = function() {
+	renderVisibleItems();
+
+	return {
+		success: true
+	};
+};
+// init.js
+
+(function init() {
+
+	// Инициализация кэшей
+	window.dateFormatCache = {};
+	window.intersectionCache = {};
+	window.apartmentCache = {};
+	window.cachedDates = [];
+
+	// Функция очистки всех кэшей при изменении периода
+	window.clearAllCaches = function() {
+		dateFormatCache = {};
+		intersectionCache = {};
+		apartmentCache = {};
+		cachedDates = [];
+	};
+
+	// Подписываемся на изменение периода
+	var originalSetPeriod = window.SetPeriod;
+	window.SetPeriod = function(fromStr, toStr) {
+		clearAllCaches(); // Очищаем кэши
+		return originalSetPeriod(fromStr, toStr);
+	};
+	
+	// 1. Первый рендер
+	renderAll();
+
+	let scrollCounter = 0;
+
+	setInterval(() => {
+	  if (scrollCounter > 0) {
+	    console.log("scroll events / sec =", scrollCounter);
+	    scrollCounter = 0;
+	  }
+	}, 1000);
+	el.rowsViewport.addEventListener("scroll", () => {
+		scrollCounter++;
+		syncHeaderScroll();
+		renderVisibleRows();
+		renderVisibleItems();
+	});
+
+	// 3. Клик вне элементов — снятие выделения
+	document.addEventListener('click', function(ev) {
+		// ВСЕГДА сначала проверяем элементы
+		var target = ev.target;
+
+		// 1. Проверяем бронирования
+		var bookingWrap = findParentWithClass(target, 'booking-wrap');
+		if (bookingWrap) {
+			// Не снимаем выделение при клике на бронирование
+			return;
+		}
+
+		// 2. Проверяем статусы
+		var statusEl = findParentWithClass(target, 'apartment-status');
+		if (statusEl) {
+			// Не снимаем выделение при клике на статус
+			return;
+		}
+
+		// 3. Проверяем popover
+		var clickedInsidePopover = !!findParentWithClass(target, 'info-popover');
+
+		// 4. Только если клик НЕ по этим элементам - снимаем выделение
+		if (!clickedInsidePopover) {
+			fixedPopover.isFixed = false;
+			hidePopover();
+			deselectItem();
+		}
+	});
+
+	// 4. Предотвращаем выделение текста (mousedown)
+	document.addEventListener('mousedown', function(ev) {
+
+		if (findParentWithClass(ev.target, 'info-popover')) return;
+
+		const tags = ['INPUT', 'TEXTAREA', 'SELECT'];
+		if (tags.includes(ev.target.tagName)) return;
+
+	});
+
+	// 5. selectstart — ТОЛЬКО предотвращение выделения, НИЧЕГО БОЛЬШЕ
+	document.addEventListener('selectstart', function(ev) {
+
+		if (findParentWithClass(ev.target, 'info-popover')) return;
+
+		const tags = ['INPUT', 'TEXTAREA', 'SELECT'];
+		if (tags.includes(ev.target.tagName)) return;
+
+		if (isInsideApp(ev.target)) {
+			ev.preventDefault();
+		}
+
+	});
+	attachSelectionHandlersOnce();
+	// Проверяем, есть ли ResizeObserver (встроенный или из polyfill)
+	if (typeof ResizeObserver !== 'undefined') {
+		const resizeObserver = new ResizeObserver(() => {
+			if (state.periodAuto) {
+				const days = calcAutoVisibleDays();
+				if (days !== state.visibleDays) {
+					state.visibleDays = days;
+					renderAll();
+				}
+			}
+		});
+		resizeObserver.observe(el.rowsViewport);
+	} else {
+		console.warn('ResizeObserver не поддерживается в этом браузере. Автоматическая коррекция ширины отключена.');
+		// Здесь можно добавить fallback, но для простоты просто пропустим
+	}
+})();
+		</script>
+	</body>
+</html>
