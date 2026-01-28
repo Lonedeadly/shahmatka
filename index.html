@@ -781,6 +781,93 @@ var bookings = [];
 var apartmentStatuses = []; // Статусы квартир (ремонт, уборка и т.д.)
 var statusColors = {};
 
+// Проверка параметра demo=true в URL
+function isDemoMode() {
+	var urlParams = new URLSearchParams(window.location.search);
+	return urlParams.get('demo') === 'true';
+}
+
+// Функция заполнения демо-данными
+function fillDemoData() {
+	var today = dayjs().startOf('day');
+
+	// Демо квартиры
+	apartments = [
+		{ id: 1, name: 'Студия 101 - Центр' },
+		{ id: 2, name: 'Апартаменты 202 - Набережная' },
+		{ id: 3, name: 'Люкс 303 - Панорама' },
+		{ id: 4, name: 'Стандарт 404 - Уют' },
+		{ id: 5, name: 'Комфорт 505 - Бизнес' },
+		{ id: 6, name: 'Эконом 606 - Старт' },
+		{ id: 7, name: 'Премиум 707 - VIP' },
+		{ id: 8, name: 'Семейный 808 - Простор' }
+	];
+
+	// Демо цвета статусов
+	statusColors = {
+		'confirmed': '#A8E6CF',      // Зелёный - подтверждено
+		'pending': '#FFE066',         // Жёлтый - ожидает
+		'cancelled': '#FF8B8B',       // Красный - отменено
+		'checkedIn': '#87CEEB',       // Голубой - заселён
+		'checkedOut': '#DDA0DD',      // Сиреневый - выселен
+		'cleaning': '#F0E68C',        // Хаки - уборка
+		'repair': '#FFA07A',          // Лососевый - ремонт
+		'blocked': '#D3D3D3'          // Серый - заблокировано
+	};
+
+	// Демо бронирования
+	bookings = [
+		// Квартира 1
+		{ id: 1001, apartmentId: 1, start: today.subtract(2, 'day').format('YYYY-MM-DD'), end: today.add(3, 'day').format('YYYY-MM-DD'), status: 'checkedIn', guestName: 'Иванов И.И.', dateCreate: today.subtract(10, 'day').valueOf() },
+		{ id: 1002, apartmentId: 1, start: today.add(5, 'day').format('YYYY-MM-DD'), end: today.add(9, 'day').format('YYYY-MM-DD'), status: 'confirmed', guestName: 'Петров П.П.', dateCreate: today.subtract(5, 'day').valueOf() },
+
+		// Квартира 2
+		{ id: 1003, apartmentId: 2, start: today.subtract(5, 'day').format('YYYY-MM-DD'), end: today.subtract(1, 'day').format('YYYY-MM-DD'), status: 'checkedOut', guestName: 'Сидоров С.С.', dateCreate: today.subtract(15, 'day').valueOf() },
+		{ id: 1004, apartmentId: 2, start: today.add(1, 'day').format('YYYY-MM-DD'), end: today.add(7, 'day').format('YYYY-MM-DD'), status: 'confirmed', guestName: 'Козлова А.В.', dateCreate: today.subtract(3, 'day').valueOf() },
+
+		// Квартира 3
+		{ id: 1005, apartmentId: 3, start: today.format('YYYY-MM-DD'), end: today.add(14, 'day').format('YYYY-MM-DD'), status: 'checkedIn', guestName: 'Михайлов М.М.', dateCreate: today.subtract(7, 'day').valueOf() },
+
+		// Квартира 4
+		{ id: 1006, apartmentId: 4, start: today.subtract(1, 'day').format('YYYY-MM-DD'), end: today.add(2, 'day').format('YYYY-MM-DD'), status: 'checkedIn', guestName: 'Новикова Е.А.', dateCreate: today.subtract(8, 'day').valueOf() },
+		{ id: 1007, apartmentId: 4, start: today.add(4, 'day').format('YYYY-MM-DD'), end: today.add(6, 'day').format('YYYY-MM-DD'), status: 'pending', guestName: 'Волков В.В.', dateCreate: today.subtract(1, 'day').valueOf() },
+		{ id: 1008, apartmentId: 4, start: today.add(8, 'day').format('YYYY-MM-DD'), end: today.add(12, 'day').format('YYYY-MM-DD'), status: 'confirmed', guestName: 'Соколова Т.И.', dateCreate: today.valueOf() },
+
+		// Квартира 5
+		{ id: 1009, apartmentId: 5, start: today.add(2, 'day').format('YYYY-MM-DD'), end: today.add(5, 'day').format('YYYY-MM-DD'), status: 'confirmed', guestName: 'Лебедев Д.С.', dateCreate: today.subtract(2, 'day').valueOf(), checkInAggregator: true },
+
+		// Квартира 6
+		{ id: 1010, apartmentId: 6, start: today.subtract(3, 'day').format('YYYY-MM-DD'), end: today.format('YYYY-MM-DD'), status: 'checkedIn', guestName: 'Морозова О.Л.', dateCreate: today.subtract(10, 'day').valueOf() },
+		{ id: 1011, apartmentId: 6, start: today.add(1, 'day').format('YYYY-MM-DD'), end: today.add(4, 'day').format('YYYY-MM-DD'), status: 'confirmed', guestName: 'Павлов К.Н.', dateCreate: today.subtract(4, 'day').valueOf() },
+
+		// Квартира 7
+		{ id: 1012, apartmentId: 7, start: today.add(3, 'day').format('YYYY-MM-DD'), end: today.add(10, 'day').format('YYYY-MM-DD'), status: 'confirmed', guestName: 'Егоров А.Б.', dateCreate: today.subtract(6, 'day').valueOf(), checkInAggregator: true },
+
+		// Квартира 8
+		{ id: 1013, apartmentId: 8, start: today.subtract(4, 'day').format('YYYY-MM-DD'), end: today.add(1, 'day').format('YYYY-MM-DD'), status: 'checkedIn', guestName: 'Семья Кузнецовых', dateCreate: today.subtract(12, 'day').valueOf() },
+		{ id: 1014, apartmentId: 8, start: today.add(3, 'day').format('YYYY-MM-DD'), end: today.add(8, 'day').format('YYYY-MM-DD'), status: 'pending', guestName: 'Орлова Н.С.', dateCreate: today.valueOf() }
+	];
+
+	// Демо статусы квартир
+	apartmentStatuses = [
+		// Уборка после выезда в квартире 2
+		{ id: 2001, apartmentId: 2, start: today.format('YYYY-MM-DD'), end: today.format('YYYY-MM-DD'), status: 'cleaning', statusType: 'cleaning', reason: 'Уборка после выезда', dateCreate: today.valueOf() },
+
+		// Ремонт в квартире 5
+		{ id: 2002, apartmentId: 5, start: today.subtract(7, 'day').format('YYYY-MM-DD'), end: today.add(1, 'day').format('YYYY-MM-DD'), status: 'repair', statusType: 'repair', reason: 'Замена сантехники', dateCreate: today.subtract(8, 'day').valueOf() },
+
+		// Блокировка в квартире 7
+		{ id: 2003, apartmentId: 7, start: today.subtract(2, 'day').format('YYYY-MM-DD'), end: today.add(2, 'day').format('YYYY-MM-DD'), status: 'blocked', statusType: 'blocked', reason: 'Резерв для владельца', dateCreate: today.subtract(5, 'day').valueOf() }
+	];
+
+	console.log('Demo mode activated: loaded', apartments.length, 'apartments,', bookings.length, 'bookings,', apartmentStatuses.length, 'statuses');
+}
+
+// Инициализация демо-режима при загрузке
+if (isDemoMode()) {
+	fillDemoData();
+}
+
 var state = {
 	anchorDate: dayjs().startOf("day"),
 	visibleDays: 0,
