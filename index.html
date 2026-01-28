@@ -41,7 +41,7 @@
 
     /* ---------- Layout ---------- */
     .board {
-      height: calc(100vh - 62px);
+      height: calc(100vh - 1px);
       display: -webkit-flex;
       display: flex;
       -webkit-flex-direction: column;
@@ -57,7 +57,12 @@
       background: #f7f8fb;
       height: 46px;
     }
-    
+    .grid-row-background {
+    background-image: linear-gradient(to right, #e0e0e0 1px, transparent 1px);
+    background-size: 40px 100%; /* 40px - ширина вашей колонки дня */
+    position: relative;
+    height: 40px; /* высота строки */
+}
     .corner {
       width: 240px;
       min-width: 240px;
@@ -167,7 +172,7 @@
     }
 
     .rowLabel {
-      height: 42px;
+      height: 40px;
       display: -webkit-flex;
       display: flex;
       -webkit-align-items: center;
@@ -188,7 +193,7 @@
     
     .row {
       position: relative;
-      height: 42px;
+      height: 40px;
       border-bottom: 1px solid #e6e8ee;
     }
 
@@ -201,11 +206,17 @@
       width: max-content;
     }
     
+    .gridRow {
+	    position: relative; /* Контейнер для абсолютных ячеек */
+	    display: block;    /* Убедись, что это не flex, иначе absolute собьется */
+	    overflow: hidden;  /* Чтобы ячейки не вылезали за границы */
+	}
     .cell {
       width: 72px;
       min-width: 72px;
       border-right: 1px solid #e6e8ee;
       position: relative;
+      height: 100%;
     }
     
     .cell:hover { 
@@ -512,6 +523,35 @@
 	  background: rgba(255,255,255,0.25);
 	  z-index: 999;
 	}
+	.events-container {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+}
+
+.events-container {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+}
+
+.event-icon {
+    width:  22px;
+    height: 22px;
+    background: #e8f0fe;           /* светло-голубой, хорошо виден */
+    border: 1px solid #c3d7ff;     /* лёгкая обводка для чёткости */
+    padding: 3px;
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);  /* лёгкая тень — помогает на белом фоне */
+}
+
+.event-icon svg {
+    width: 100%; /* ← иконка растягивается на весь круг */
+    height: 100%;
+    fill: currentColor;
+}
   </style>
 	<body>
 		<button id="actionButton" style="display: none;">Скрытая</button>
@@ -667,7 +707,7 @@ function fixPopover(type, id, clientX, clientY) {
 }
 
 function safe(val) {
-	return val || '';
+	return val || '-';
 }
 
 function isInsideApp(el) {
@@ -764,6 +804,9 @@ var el = {
 	infoPopover: document.getElementById("infoPopover")
 };
 
+var allDaysArray = [];
+var totalDaysCount = 0;
+
 var bookingsByApartment = {};
 var statusesByApartment = {};
 
@@ -774,34 +817,43 @@ var visibilityState = {
 
 // Функция для определения расширенного диапазона загрузки
 function getExtendedLoadRange() {
-	const visible = getVisibleRange();
+    if (!state.periodAuto) {
+        // РУЧНОЙ ПЕРИОД: загружаем ВЕСЬ период сразу
+        return {
+            start: state.periodFrom,
+            end: state.periodTo
+        };
+    } else {
+        // АВТО ПЕРИОД: используем буфер
+        const bufferDays = 14;
+        const MAX_LOAD_DAYS = 180;
+        
+        // Получаем видимый диапазон в виде дат
+        const visibleStart = state.anchorDate;
+        const visibleEnd = state.anchorDate.add(state.visibleDays, 'day');
+        
+        let start = visibleStart.subtract(bufferDays, 'day');
+        let end = visibleEnd.add(bufferDays, 'day');
 
-	if (!state.periodAuto) {
-		// РУЧНОЙ ПЕРИОД: загружаем ВЕСЬ период сразу
-		return {
-			start: state.periodFrom,
-			end: state.periodTo
-		};
-	} else {
-		// АВТО ПЕРИОД: используем буфер
-		const bufferDays = 14;
-		const MAX_LOAD_DAYS = 180;
+        if (end.diff(start, 'day') > MAX_LOAD_DAYS) {
+            const halfBuffer = Math.floor(MAX_LOAD_DAYS / 2);
+            const visibleCenter = visibleStart.add(state.visibleDays / 2, 'day');
+            start = visibleCenter.subtract(halfBuffer, 'day');
+            end = visibleCenter.add(halfBuffer, 'day');
+        }
 
-		let start = visible.start.subtract(bufferDays, 'day');
-		let end = visible.end.add(bufferDays, 'day');
+        return { start, end };
+    }
+}
 
-		if (end.diff(start, 'day') > MAX_LOAD_DAYS) {
-			const halfBuffer = Math.floor(MAX_LOAD_DAYS / 2);
-			const visibleCenter = visible.start.add(visible.days / 2, 'day');
-			start = visibleCenter.subtract(halfBuffer, 'day');
-			end = visibleCenter.add(halfBuffer, 'day');
-		}
+function isEndOfDay(date) {
+    // Проверяем, заканчивается ли дата в конце дня (23:59:59)
+    return date.hour() === 23 && date.minute() === 59 && date.second() === 59;
+}
 
-		return {
-			start,
-			end
-		};
-	}
+function isStartOfDay(date) {
+    // Проверяем, начинается ли дата в начале дня (00:00:00)
+    return date.hour() === 0 && date.minute() === 0 && date.second() === 0;
 }
 //selection_functions.js
 function selectItem(type, id, element, ev) {
@@ -861,16 +913,40 @@ function isItemSelected() {
 }
 // period-logic.js
 
+function updateAllDaysArray() {
+    if (state.periodAuto) {
+        allDaysArray = [];
+        totalDaysCount = state.visibleDays;
+        for (var i = 0; i < state.visibleDays; i++) {
+            allDaysArray.push(state.anchorDate.add(i, 'day'));
+        }
+    } else {
+        // В ручном режиме заполняем массив ВСЕМИ днями периода
+        allDaysArray = [];
+        totalDaysCount = 0;
+        if (state.periodFrom && state.periodTo) {
+            var current = state.periodFrom.clone();
+            while (current.isSameOrBefore(state.periodTo)) {
+                allDaysArray.push(current.clone());
+                current = current.add(1, 'day');
+            }
+            totalDaysCount = allDaysArray.length;
+        }
+    }
+}
+
 function onPeriodChanged() {
-	// Сбрасываем кеш при изменении периода
-	visibilityState.lastRequestedRange = null;
-	clearAllCaches(); 
-	
-	const p = getVisibleDaysAndAnchor();
-  	state.visibleDays = p.days;
-  
-	checkAndRequestData();
-	renderAll(); // FIX: Полный перерендер
+    visibilityState.lastRequestedRange = null;
+    clearAllCaches(); 
+    
+    // Всегда обновляем массив дней
+    updateAllDaysArray();
+    
+    const p = getVisibleDaysAndAnchor();
+    state.visibleDays = p.days;
+    
+    checkAndRequestData();
+    renderAll();
 }
 
 function calcAutoVisibleDays() {
@@ -884,16 +960,34 @@ function getVisibleDaysAndAnchor() {
 			days: calcAutoVisibleDays()
 		};
 	}
+	
+	// Ручной режим
 	var from = state.periodFrom;
 	var to = state.periodTo;
 	if (from && to && (to.isSame(from) || to.isAfter(from))) {
-		var days = to.diff(from, "day") + 1;
+		var totalDays = to.diff(from, "day") + 1;
+		var scrollLeft = el.rowsViewport.scrollLeft;
+		var scrollDays = Math.floor(scrollLeft / state.columnWidth);
+		
+		// Количество дней, которые можно показать на экране
+		var visibleDays = calcAutoVisibleDays();
+		
+		// Начало видимой области
+		var visibleStart = from.add(scrollDays, 'day');
+		
+		// Сколько дней осталось от начала видимой области до конца периода
+		var daysRemaining = totalDays - scrollDays;
+		
+		// Видимых дней не может быть больше, чем осталось в периоде
+		visibleDays = Math.min(visibleDays, daysRemaining);
+		
 		return {
-			anchor: from,
-			days: clamp(days, 1, 366) // FIX: Уже есть, но ок
+			anchor: visibleStart.startOf("day"),
+			days: visibleDays
 		};
 	}
-	// FIX: Fallback на auto, если период неверный
+	
+	// Fallback на auto, если период неверный
 	console.warn('Неверный manual период — fallback на auto');
 	return {
 		anchor: state.anchorDate.startOf("day"),
@@ -901,15 +995,27 @@ function getVisibleDaysAndAnchor() {
 	};
 }
 
+const container = document.getElementById('rowsViewport'); // Твой скролл-контейнер
+
 function getVisibleRange() {
-	const p = getVisibleDaysAndAnchor();
-	const start = p.anchor.startOf("day");
-	const end = start.add(p.days, "day"); // end НЕ включительно
-	return {
-		start,
-		end,
-		days: p.days
-	};
+    if (state.periodAuto) {
+        const p = getVisibleDaysAndAnchor();
+        let start = p.anchor.startOf("day");
+        let end = start.add(p.days, "day");
+        return {
+            start,
+            end,
+            days: p.days
+        };
+    } else {
+        // Ручной режим: видимый диапазон - это весь период
+        // (рендерим все дни, но позиционируем со смещением скролла)
+        return {
+            start: state.periodFrom,
+            end: state.periodTo,
+            days: allDaysArray.length
+        };
+    }
 }
 // render.js
 function updateSelectedItemPopover() {
@@ -1007,26 +1113,46 @@ function renderAll() {
 
 
 function renderHeaderDays() {
-	el.daysRow.innerHTML = "";
-	invalidateDateCache();
-	var start = state.anchorDate;
+    el.daysRow.innerHTML = "";
+    invalidateDateCache();
 
-	for (var i = 0; i < state.visibleDays; i++) {
-		var d = start.add(i, "day");
-		var cell = document.createElement("div");
-		cell.className = "dayCell" + (d.isSame(dayjs(), "day") ? " today" : "");
-		cell.id = dayId(d);
-		cell.style.width = state.columnWidth + "px";
-		cell.style.minWidth = state.columnWidth + "px";
-		cell.innerHTML = '<div class="d">' + d.format("DD.MM") + " (" + ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"][d.day()] + ")</div>";
-		el.daysRow.appendChild(cell);
-	}
-	var totalWidth = state.visibleDays * state.columnWidth;
-	el.daysRow.style.width = totalWidth + "px";
+    let days;
+
+    if (state.periodAuto) {
+        days = [];
+        for (let i = 0; i < state.visibleDays; i++) {
+            days.push(state.anchorDate.add(i, "day"));
+        }
+    } else {
+        // ✅ В РУЧНОМ РЕЖИМЕ — ВСЕ ДНИ ПЕРИОДА
+        days = allDaysArray;
+    }
+
+    for (let i = 0; i < days.length; i++) {
+        const d = days[i];
+
+        const cell = document.createElement("div");
+        cell.className = "dayCell" + (d.isSame(dayjs(), "day") ? " today" : "");
+        cell.id = dayId(d);
+        cell.style.width = state.columnWidth + "px";
+        cell.style.minWidth = state.columnWidth + "px";
+        cell.innerHTML =
+            '<div class="d">' +
+            d.format("DD.MM") +
+            " (" +
+            ["Вс","Пн","Вт","Ср","Чт","Пт","Сб"][d.day()] +
+            ")</div>";
+
+        el.daysRow.appendChild(cell);
+    }
+
+    el.daysRow.style.width =
+        (days.length * state.columnWidth) + "px";
 }
 
+
 function getVisibleRowRange() {
-	var rowHeight = 42;
+	var rowHeight = 40; // Изменено с 42 на 40 (как в CSS)
 	var buffer = 3;
 
 	var scrollTop = el.rowsViewport.scrollTop;
@@ -1050,94 +1176,119 @@ function getVisibleRowRange() {
 }
 
 function getVisibleColumnRange() {
-	const scrollLeft = el.rowsViewport.scrollLeft;
-	const viewportWidth = el.rowsViewport.clientWidth;
-	const buffer = 3; // буферные колонки
+    const scrollLeft = el.rowsViewport.scrollLeft;
+    const viewportWidth = el.rowsViewport.clientWidth;
+    const cellWidth = state.columnWidth;
+    const buffer = 5;
 
-	const first = Math.max(0, Math.floor(scrollLeft / state.columnWidth) - buffer);
-	const last = Math.min(
-		state.visibleDays - 1,
-		Math.ceil((scrollLeft + viewportWidth) / state.columnWidth) + buffer
-	);
+    // Общее количество дней для расчета
+    const totalDays = state.periodAuto ? state.visibleDays : allDaysArray.length;
+    
+    const first = Math.floor(scrollLeft / cellWidth);
+    const last = Math.ceil((scrollLeft + viewportWidth) / cellWidth);
 
-	return {
-		first,
-		last
-	};
+    return {
+        first: Math.max(0, first - buffer),
+        last: Math.min(totalDays - 1, last + buffer),
+        cellWidth: cellWidth
+    };
 }
 
 function renderVisibleRows() {
-	var range = getVisibleRowRange();
+    var rowRange = getVisibleRowRange();
+    var colRange = getVisibleColumnRange(); // Новое: получаем диапазон колонок
 
-	el.leftCol.innerHTML = "";
-	el.rowsContent.innerHTML = "";
+    el.leftCol.innerHTML = "";
+    el.rowsContent.innerHTML = "";
 
-	el.leftCol.style.paddingTop = (range.first * range.rowHeight) + "px";
-	el.rowsContent.style.paddingTop = (range.first * range.rowHeight) + "px";
+    el.leftCol.style.paddingTop = (rowRange.first * rowRange.rowHeight) + "px";
+    el.rowsContent.style.paddingTop = (rowRange.first * rowRange.rowHeight) + "px";
 
-	var fragL = document.createDocumentFragment();
-	var fragR = document.createDocumentFragment();
+    var fragL = document.createDocumentFragment();
+    var fragR = document.createDocumentFragment();
 
-	for (var i = range.first; i <= range.last; i++) {
-		var ap = apartments[i];
+    for (var i = rowRange.first; i <= rowRange.last; i++) {
+        var ap = apartments[i];
 
-		var lbl = document.createElement("div");
-		lbl.className = "rowLabel";
-		lbl.id = apartmentRowId(ap.id);
-		lbl.textContent = ap.name;
-		fragL.appendChild(lbl);
+        // Левая колонка (названия номеров) - остается без изменений
+        var lbl = document.createElement("div");
+        lbl.className = "rowLabel";
+        lbl.id = apartmentRowId(ap.id);
+        lbl.textContent = ap.name;
+        fragL.appendChild(lbl);
 
-		var row = buildGridRow(ap.id, apartmentRowId(ap.id));
-		fragR.appendChild(row);
-	}
+        // Правая колонка - передаем colRange для виртуализации ячеек внутри строки
+        var row = buildGridRow(ap.id, apartmentRowId(ap.id), colRange);
+        fragR.appendChild(row);
+    }
 
-	el.leftCol.appendChild(fragL);
-	el.rowsContent.appendChild(fragR);
-
+    el.leftCol.appendChild(fragL);
+    el.rowsContent.appendChild(fragR);
 }
 
-function buildGridRow(apartmentId, rowKey) {
-	var row = document.createElement("div");
-	row.className = "row";
-	row.setAttribute("data-apartment-id", String(apartmentId));
-	row.setAttribute("data-row-key", rowKey);
+function buildGridRow(apartmentId, rowKey, colRange) {
+    var row = document.createElement("div");
+    row.className = "row";
+    row.setAttribute("data-apartment-id", String(apartmentId));
+    row.setAttribute("data-row-key", rowKey);
+    
+    // ВАЖНО: Используем правильное количество дней
+    const totalDays = state.periodAuto ? state.visibleDays : allDaysArray.length;
+    row.style.width = (totalDays * colRange.cellWidth) + "px";
+    
+    row.style.position = "relative";
+    row.style.height = "40px";
 
-	var inner = document.createElement("div");
-	inner.className = "rowInner";
+    // Создаем контейнер для ячеек
+    var cellsContainer = document.createElement("div");
+    cellsContainer.style.position = "absolute";
+    cellsContainer.style.width = "100%";
+    cellsContainer.style.height = "100%";
+    
+    // Создаем ячейки только для видимого диапазона
+    for (var j = colRange.first; j <= colRange.last; j++) {
+        var day = allDaysArray[j];
+        var cell = document.createElement("div");
+        cell.className = "cell";
+        cell.setAttribute("data-apartment-id", String(apartmentId));
+        cell.setAttribute("data-date", day.format ? day.format("YYYY-MM-DD") : dayjs(day).format("YYYY-MM-DD"));
+        cell.setAttribute("data-index", String(j));
+        cell.setAttribute("data-row-key", rowKey);
+        cell.style.position = "absolute";
+        cell.style.left = (j * colRange.cellWidth) + "px";
+        cell.style.width = colRange.cellWidth + "px";
+        cell.style.height = "100%";
+        cellsContainer.appendChild(cell);
+    }
+    
+    // СОЗДАЕМ СЛОЙ ДЛЯ ВЫДЕЛЕНИЯ
+    var sel = document.createElement("div");
+    sel.className = "selection";
+    sel.setAttribute("data-row-key", rowKey);
+    
+    // СОЗДАЕМ СЛОЙ ДЛЯ СТАТУСОВ
+    var statusLayer = document.createElement("div");
+    statusLayer.className = "statusLayer";
+    statusLayer.style.position = "absolute";
+    statusLayer.style.width = "100%";
+    statusLayer.style.height = "100%";
+    statusLayer.style.pointerEvents = "none";
+    
+    // СОЗДАЕМ СЛОЙ ДЛЯ БРОНИРОВАНИЙ
+    var bookingsLayer = document.createElement("div");
+    bookingsLayer.className = "bookingsLayer";
+    bookingsLayer.style.position = "absolute";
+    bookingsLayer.style.width = "100%";
+    bookingsLayer.style.height = "100%";
+    bookingsLayer.style.pointerEvents = "none";
 
+    // Добавляем все элементы в правильном порядке
+    row.appendChild(cellsContainer);
+    row.appendChild(sel);
+    row.appendChild(statusLayer);
+    row.appendChild(bookingsLayer);
 
-	var sel = document.createElement("div");
-	sel.className = "selection";
-	sel.setAttribute("data-row-key", rowKey);
-
-	for (var i = 0; i < state.visibleDays; i++) {
-		var d = state.anchorDate.add(i, "day");
-		var c = document.createElement("div");
-		c.className = "cell";
-		c.id = cellId(apartmentId, d);
-		c.setAttribute("data-apartment-id", String(apartmentId));
-		c.setAttribute("data-date", d.format("YYYY-MM-DD"));
-		c.setAttribute("data-index", String(i));
-		c.setAttribute("data-row-key", rowKey);
-		c.style.width = state.columnWidth + "px";
-		c.style.minWidth = state.columnWidth + "px";
-		inner.appendChild(c);
-	}
-
-	var bookingsLayer = document.createElement("div");
-	bookingsLayer.className = "bookingsLayer";
-
-	var statusLayer = document.createElement("div");
-	statusLayer.className = "statusLayer";
-
-	row.appendChild(inner); // ПЕРВЫМ - ячейки сетки
-	row.appendChild(sel); // ВТОРЫМ - выделение
-	row.appendChild(statusLayer); // ТРЕТИМ - слой статусов
-	row.appendChild(bookingsLayer); // ЧЕТВЕРТЫМ - слой бронирований
-
-	const totalWidth = state.visibleDays * state.columnWidth;
-	inner.style.width = totalWidth + "px";
-	return row;
+    return row;
 }
 
 function findRowByKey(rowKey) {
@@ -1167,287 +1318,338 @@ function intersectsVisibleRange(item, range) {
 }
 
 function renderVisibleItems() {
-	var range = getVisibleRange();
-	var rows = getVisibleRowRange();
+    var colRange = getVisibleColumnRange();
+    var rows = getVisibleRowRange();
 
-	for (var i = rows.first; i <= rows.last; i++) {
-		var ap = apartments[i];
-		var row = findRowByKey(apartmentRowId(ap.id));
-		if (!row) continue;
+    for (var i = rows.first; i <= rows.last; i++) {
+        var ap = apartments[i];
+        var row = findRowByKey(apartmentRowId(ap.id));
+        if (!row) continue;
 
-		var bookingLayer = row.querySelector(".bookingsLayer");
-		var statusLayer = row.querySelector(".statusLayer");
+        var bookingLayer = row.querySelector(".bookingsLayer");
+        var statusLayer = row.querySelector(".statusLayer");
 
-		bookingLayer.innerHTML = "";
-		statusLayer.innerHTML = "";
+        if (!bookingLayer || !statusLayer) continue;
 
-		var apBookings = bookingsByApartment[ap.id] || [];
-		var apStatuses = statusesByApartment[ap.id] || [];
+        bookingLayer.innerHTML = "";
+        statusLayer.innerHTML = "";
 
-		for (var b = 0; b < apBookings.length; b++) {
-			var booking = apBookings[b];
-			if (!intersectsVisibleRange(booking, range)) continue;
-			var elB = createBookingEl(booking);
-			if (elB) bookingLayer.appendChild(elB);
-		}
-		for (var s = 0; s < apStatuses.length; s++) {
-			var status = apStatuses[s];
-			if (!intersectsVisibleRange(status, range)) continue;
-			var elS = createApartmentStatusEl(status);
-			if (elS) statusLayer.appendChild(elS);
-		}
+        var apBookings = bookingsByApartment[ap.id] || [];
+        var apStatuses = statusesByApartment[ap.id] || [];
 
-	}
+        // ВАЖНО: используем ту же логику фильтрации, что и в старом коде
+        var visibleRange = getVisibleRange();
+        
+        for (var b = 0; b < apBookings.length; b++) {
+            var booking = apBookings[b];
+            if (!intersectsVisibleRange(booking, visibleRange)) continue;
+            var elB = createBookingEl(booking);
+            if (elB) bookingLayer.appendChild(elB);
+        }
+        
+        for (var s = 0; s < apStatuses.length; s++) {
+            var status = apStatuses[s];
+            if (!intersectsVisibleRange(status, visibleRange)) continue;
+            var elS = createApartmentStatusEl(status);
+            if (elS) statusLayer.appendChild(elS);
+        }
+    }
 }
 
 function createBookingEl(b, forceRender = false) {
-	var start = dayjs(b.start);
-	var end = dayjs(b.end);
+    var start = dayjs(b.start);
+    var end = dayjs(b.end);
+    
+    // Проверяем пересечение с видимым диапазоном
+    if (!forceRender) {
+        var range = getVisibleRange();
+        if (!intersectsVisibleRange(b, range)) {
+            return null;
+        }
+    }
+    
+    // ВАЖНО: Используем правильную логику для расчета позиции
+    // В ручном режиме нужно учитывать periodFrom как начало всей сетки
+    var gridStart, totalGridDays;
+    
+    if (state.periodAuto) {
+        gridStart = state.anchorDate.startOf("day");
+        totalGridDays = state.visibleDays;
+    } else {
+        // В ручном режиме gridStart - это начало всего периода (periodFrom)
+        // Используем allDaysArray для точного расчета
+        gridStart = state.periodFrom ? state.periodFrom.startOf("day") : state.anchorDate.startOf("day");
+        totalGridDays = allDaysArray.length;
+    }
+    
+    var startDay = start.startOf("day");
+    var endDay = end.startOf("day").add(1, "day"); // +1 день для корректного расчета
+    
+    // Если полностью вне всей сетки периода - не рендерим
+    if (startDay.isSameOrAfter(gridStart.add(totalGridDays, "day")) || 
+        endDay.isSameOrBefore(gridStart)) {
+        return null;
+    }
+    
+    // Рассчитываем позицию относительно начала ВСЕГО ПЕРИОДА (gridStart)
+    var leftDays = startDay.diff(gridStart, "day");
+    var rightDays = endDay.diff(gridStart, "day");
+    
+    // Ограничиваем в пределах всей сетки периода
+    var clampedLeft = clamp(leftDays, 0, totalGridDays);
+    var clampedRight = clamp(rightDays, 0, totalGridDays);
+    
+    // Вычисляем позицию в пикселях (относительно начала сетки)
+    var leftPx = clampedLeft * state.columnWidth;
+    var widthPx = Math.max(
+        state.columnWidth,
+        (clampedRight - clampedLeft) * state.columnWidth
+    );
+    
+    var offset = 4;
+    var halfOffset = state.columnWidth / 2;
+    
+    var isRealStartVisible = startDay.isSameOrAfter(gridStart);
+    var isRealEndVisible = endDay.isSameOrBefore(gridStart.add(totalGridDays, "day"));
+    
+   // Левый край
+if (!startDay.isBefore(gridStart)) {
+    leftPx += halfOffset;
+    widthPx -= halfOffset;
+}
 
-	if (state.periodAuto && !forceRender) {
-		var range = getVisibleRange();
-		if (!intersectsVisibleRange(b, range)) {
-			return null;
-		}
-	}
-	var startDay = start.startOf("day");
-	var endDay = end.startOf("day").add(1, "day");
+// Правый край
+if (!endDay.isAfter(gridStart.add(totalGridDays, "day"))) {
+    widthPx -= halfOffset;
+}
 
-	var gridStart = state.anchorDate.startOf("day");
-	var gridEnd = gridStart.add(state.visibleDays, "day");
+// Дополнительные отступы для длинных бронирований (если > 1 видимого дня)
+if (clampedRight - clampedLeft > 1) {
+    leftPx += offset;
+    widthPx -= offset * 2;
+}
 
-	if (startDay.isSameOrAfter(gridEnd) || endDay.isSameOrBefore(gridStart)) {
-		return null;
-	}
-
-	var leftDays = startDay.diff(gridStart, "day");
-	var rightDays = endDay.diff(gridStart, "day");
-
-	var clampedLeft = clamp(leftDays, 0, state.visibleDays);
-	var clampedRight = clamp(rightDays, 0, state.visibleDays);
-
-	var leftPx = clampedLeft * state.columnWidth;
-	var widthPx = Math.max(
-		state.columnWidth,
-		(clampedRight - clampedLeft) * state.columnWidth
-	);
-
-	var offset = 4;
-	var halfOffset = state.columnWidth / 2;
-
-	var isRealStartVisible = startDay.isSameOrAfter(gridStart);
-	var isRealEndVisible = endDay.isSameOrBefore(gridEnd);
-
-	/* ЛЕВЫЙ КРАЙ */
-	if (isRealStartVisible && clampedLeft >= 0 && clampedLeft < state.visibleDays) {
-		leftPx += halfOffset;
-		widthPx -= halfOffset;
-	}
-
-	/* ПРАВЫЙ КРАЙ */
-	if (isRealEndVisible && clampedRight > 0 && clampedRight <= state.visibleDays) {
-		widthPx -= halfOffset;
-	}
-
-	if (clampedRight - clampedLeft > 1) {
-		leftPx += offset;
-		widthPx -= offset * 2;
-	}
-
-	/* ===============================
-	   ВНЕШНИЙ КОНТЕЙНЕР (НЕ РЕЖЕТ)
-	=============================== */
-	var wrap = document.createElement("div");
-	wrap.className = "booking-wrap";
-	wrap.style.left = leftPx + "px";
-	wrap.style.width = widthPx + "px";
-	wrap.style.zIndex = "2";
-	wrap.style.position = "absolute";
-	wrap.setAttribute("data-booking-id", String(b.id));
-	wrap.setAttribute("data-date-create", String(b.dateCreate || "0"));
-	wrap.setAttribute("data-apartment-id", String(b.apartmentId));
-
-	/* ===============================
-	   САМА ПОЛОСКА БРОНИ (РЕЖЕТ ТЕКСТ)
-	=============================== */
-	var div = document.createElement("div");
-	div.className = "booking";
-	div.id = bookingIdStr(b);
-	div.setAttribute("data-booking-id", String(b.id));
-	div.setAttribute("data-date-create", String(b.dateCreate || "0"));
-	div.setAttribute("data-apartment-id", String(b.apartmentId));
-
-	var color = statusColors[b.status] || "#D9E6FF";
-	div.style.background = color;
-
-	var label = b.guestName || ("Бронь #" + b.id);
-
-	var textSpan = document.createElement("span");
-	textSpan.className = "booking-label";
-	textSpan.textContent =
-		label + " · " +
-		getFormattedDate(start, "DD.MM") + "–" + getFormattedDate(end, "DD.MM");
-
-	div.appendChild(textSpan);
-	wrap.appendChild(div);
-
-	/* ===============================
-	   API-БЕЙДЖ (НЕ ВНУТРИ booking!)
-	=============================== */
-	if (b.checkInAggregator === true) {
-		var apiBadge = document.createElement("span");
-		apiBadge.className = "api-badge";
-		apiBadge.textContent = "api";
-		wrap.appendChild(apiBadge);
-		div.setAttribute('data-locked', 'true');
-	}
-
-	/* ===============================
-	   ОБРАБОТЧИКИ
-	=============================== */
-	wrap.onmousedown = function(ev) {
-		//ev.stopPropagation(); // ДОБАВИТЬ
-		onBookingMouseDown(ev, b);
-	};
-
-	wrap.onmousemove = function(ev) {
-		// НЕ показываем подсказку, если уже есть зафиксированная подсказка
-		if (fixedPopover.isFixed) return;
-
-		if (!selectedItem.element || selectedItem.id !== b.id) {
-			showBookingPopover(ev, b, false);
-		}
-	};
-
-	wrap.onmouseleave = hidePopover;
-
-	wrap.oncontextmenu = function(ev) {
-		ev.preventDefault();
-		ev.stopPropagation();
-		selectItem("booking", b.id, wrap, ev);
-	};
-
-	wrap.ondblclick = function() {
-		dispatch("openDocument", b);
-	};
-
-	wrap.onclick = function(ev) {
-		ev.preventDefault();
-		ev.stopPropagation();
-		ev.stopImmediatePropagation(); // ДОБАВИТЬ
-		selectItem("booking", b.id, wrap, ev);
-	};
-	wrap.addEventListener('click', function(ev) {
-		ev.preventDefault();
-		ev.stopPropagation();
-		ev.stopImmediatePropagation();
-
-		selectItem("booking", b.id, wrap, ev); // ← ev передается здесь!
-	});
-
-	div.onclick = function(ev) {
-		ev.preventDefault();
-		ev.stopPropagation();
-		ev.stopImmediatePropagation();
-		selectItem("booking", b.id, wrap, ev);
-	};
-
-	return wrap;
+// Минимальная ширина — чтобы не сжималось до нуля
+widthPx = Math.max(state.columnWidth / 2 + 1, widthPx);  // ← минимум чуть больше половины, чтобы было видно
+    
+    /* ===============================
+       ВНЕШНИЙ КОНТЕЙНЕР (НЕ РЕЖЕТ)
+    =============================== */
+    var wrap = document.createElement("div");
+    wrap.className = "booking-wrap";
+    wrap.style.left = leftPx + "px";
+    wrap.style.width = widthPx + "px";
+    wrap.style.zIndex = "2";
+    wrap.style.position = "absolute";
+    wrap.setAttribute("data-booking-id", String(b.id));
+    wrap.setAttribute("data-date-create", String(b.dateCreate || "0"));
+    wrap.setAttribute("data-apartment-id", String(b.apartmentId));
+    
+    /* ===============================
+       САМА ПОЛОСКА БРОНИ (РЕЖЕТ ТЕКСТ)
+    =============================== */
+    var div = document.createElement("div");
+    div.className = "booking";
+    div.id = bookingIdStr(b);
+    div.setAttribute("data-booking-id", String(b.id));
+    div.setAttribute("data-date-create", String(b.dateCreate || "0"));
+    div.setAttribute("data-apartment-id", String(b.apartmentId));
+    
+    var color = statusColors[b.status] || "#D9E6FF";
+    div.style.background = color;
+    
+    var label = b.guestName || ("Бронь #" + b.id);
+    
+    var textSpan = document.createElement("span");
+    textSpan.className = "booking-label";
+    textSpan.textContent =
+        label + " · " +
+        getFormattedDate(start, "DD.MM") + "–" + getFormattedDate(end, "DD.MM");
+    
+    div.appendChild(textSpan);
+    wrap.appendChild(div);
+    
+    /* ===============================
+       API-БЕЙДЖ
+    =============================== */
+    if (b.checkInAggregator === true) {
+        var apiBadge = document.createElement("span");
+        apiBadge.className = "api-badge";
+        apiBadge.textContent = "api";
+        wrap.appendChild(apiBadge);
+        div.setAttribute('data-locked', 'true');
+    }
+    
+    /* ===============================
+       ОБРАБОТЧИКИ
+    =============================== */
+    wrap.onmousedown = function(ev) {
+        onBookingMouseDown(ev, b);
+    };
+    
+    wrap.onmousemove = function(ev) {
+        if (fixedPopover.isFixed) return;
+        if (!selectedItem.element || selectedItem.id !== b.id) {
+            showBookingPopover(ev, b, false);
+        }
+    };
+    
+    wrap.onmouseleave = hidePopover;
+    
+    wrap.oncontextmenu = function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        selectItem("booking", b.id, wrap, ev);
+    };
+    
+    wrap.ondblclick = function() {
+        dispatch("openDocument", b);
+    };
+    
+    wrap.onclick = function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        selectItem("booking", b.id, wrap, ev);
+    };
+    
+    wrap.addEventListener('click', function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        selectItem("booking", b.id, wrap, ev);
+    });
+    
+    div.onclick = function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        ev.stopImmediatePropagation();
+        selectItem("booking", b.id, wrap, ev);
+    };
+    
+    return wrap;
 }
 
 
 function createApartmentStatusEl(status, forceRender = false) {
-	var start = dayjs(status.start);
-	var end = dayjs(status.end);
-	if (state.periodAuto && !forceRender) {
-		var range = getVisibleRange();
-		if (!intersectsVisibleRange(status, range)) {
-			return null;
-		}
-	}
-	var startDay = start.startOf("day");
-	var endDay = end.startOf("day").add(1, "day");
-	var gridStart = state.anchorDate.startOf("day");
-	var gridEnd = gridStart.add(state.visibleDays, "day");
-	if (startDay.isSameOrAfter(gridEnd) || endDay.isSameOrBefore(gridStart)) {
-		return null;
-	}
-	var leftDays = startDay.diff(gridStart, "day");
-	var rightDays = endDay.diff(gridStart, "day");
-	var clampedLeft = clamp(leftDays, 0, state.visibleDays);
-	var clampedRight = clamp(rightDays, 0, state.visibleDays);
-	var leftPx = clampedLeft * state.columnWidth;
-	var widthPx = Math.max(state.columnWidth, (clampedRight - clampedLeft) * state.columnWidth);
-	// Проверяем, начинается ли статус с начала дня
-	var isStartOfDay = start.hour() === 0 && start.minute() === 0;
-	// Проверяем, заканчивается ли статус в конце дня
-	var isEndOfDay = end.hour() === 23 && end.minute() === 59;
-	// Смещение для визуального разделения
-	var offset = 4; // отступ в пикселях
-	var halfOffset = state.columnWidth / 2; // половина ширины ячейки
-	// Корректируем левую позицию и ширину
-	var isRealStartVisible = startDay.isSameOrAfter(gridStart);
-	var isRealEndVisible = endDay.isSameOrBefore(gridEnd);
-
-	/* ЛЕВЫЙ КРАЙ */
-	if (isRealStartVisible && clampedLeft >= 0 && clampedLeft < state.visibleDays) {
-		leftPx += halfOffset;
-		widthPx -= halfOffset;
-	}
-
-	/* ПРАВЫЙ КРАЙ */
-	if (isRealEndVisible && clampedRight > 0 && clampedRight <= state.visibleDays) {
-		widthPx -= halfOffset;
-	}
-	// Добавляем небольшие отступы для визуального разделения
-	if (clampedRight - clampedLeft > 1) {
-		leftPx += offset;
-		widthPx -= offset * 2;
-	}
-	var div = document.createElement("div");
-	div.className = "apartment-status";
-	div.id = apartmentStatusIdStr(status);
-	div.setAttribute("data-status-id", String(status.id));
-	div.setAttribute("data-date-create", String(status.dateCreate || "0"));
-	div.setAttribute("data-apartment-id", String(status.apartmentId));
-	div.setAttribute("data-status-type", status.statusType || "other");
-	var color = statusColors[status.status] || "#F0F0F0";
-	div.style.background = color;
-	div.style.opacity = "0.6"; // полупрозрачный фон
-	div.style.left = leftPx + "px";
-	div.style.width = widthPx + "px";
-	div.style.zIndex = "1"; // под бронированиями
-	var label = status.reason || status.statusType || "Статус";
-	div.textContent = label + " · " + start.format("DD.MM") + "–" + end.format("DD.MM");
-	// Свои обработчики для статусов
-	div.onmousemove = function(ev) {
-		// НЕ показываем подсказку, если уже есть зафиксированная подсказка
-		if (fixedPopover.isFixed) return;
-		// Показываем подсказку только если элемент НЕ выделен
-		if (!selectedItem.element || selectedItem.id !== status.id) {
-			showStatusPopover(ev, status, false); // false - не фиксированная позиция
-		}
-		// Если элемент выделен - ничего не делаем, подсказка уже зафиксирована
-	};
-	div.onmouseleave = hidePopover;
-	div.oncontextmenu = function(ev) {
-		ev.preventDefault();
-		ev.stopPropagation(); // Останавливаем всплытие
-		selectItem("status", status.id, div, ev);
-	};
-	div.ondblclick = function() {
-		dispatch('openDocument', status);
-	};
-	div.onmousedown = function(ev) {
-		onStatusMouseDown(ev, status);
-	};
-	div.onclick = function(ev) {
-		ev.preventDefault(); // Добавьте это!
-		ev.stopPropagation(); // Останавливаем всплытие, чтобы не срабатывали другие обработчики
-		selectItem("status", status.id, div, ev); // Передаем ev для фиксации позиции
-	};
-	return div;
-};
+    var start = dayjs(status.start);
+    var end = dayjs(status.end);
+    
+    // Проверяем пересечение с видимым диапазоном
+    if (!forceRender) {
+        var range = getVisibleRange();
+        if (!intersectsVisibleRange(status, range)) {
+            return null;
+        }
+    }
+    
+    // ВАЖНО: Используем правильную логику для расчета позиции
+    // В ручном режиме нужно учитывать periodFrom как начало всей сетки
+    var gridStart, totalGridDays;
+    
+    if (state.periodAuto) {
+        gridStart = state.anchorDate.startOf("day");
+        totalGridDays = state.visibleDays;
+    } else {
+        // В ручном режиме gridStart - это начало всего периода (periodFrom)
+        // Используем allDaysArray для точного расчета
+        gridStart = state.periodFrom ? state.periodFrom.startOf("day") : state.anchorDate.startOf("day");
+        totalGridDays = allDaysArray.length;
+    }
+    
+    var startDay = start.startOf("day");
+    var endDay = end.startOf("day").add(1, "day");
+    
+    if (startDay.isSameOrAfter(gridStart.add(totalGridDays, "day")) || 
+        endDay.isSameOrBefore(gridStart)) {
+        return null;
+    }
+    
+    var leftDays = startDay.diff(gridStart, "day");
+    var rightDays = endDay.diff(gridStart, "day");
+    var clampedLeft = clamp(leftDays, 0, totalGridDays);
+    var clampedRight = clamp(rightDays, 0, totalGridDays);
+    
+    var leftPx = clampedLeft * state.columnWidth;
+    var widthPx = Math.max(state.columnWidth, (clampedRight - clampedLeft) * state.columnWidth);
+    
+    var offset = 4;
+    var halfOffset = state.columnWidth / 2;
+    
+    var isRealStartVisible = startDay.isSameOrAfter(gridStart);
+    var isRealEndVisible = endDay.isSameOrBefore(gridStart.add(totalGridDays, "day"));
+    
+    /* ЛЕВЫЙ КРАЙ */
+    if (isRealStartVisible && clampedLeft >= 0 && clampedLeft < totalGridDays) {
+        leftPx += halfOffset;
+        widthPx -= halfOffset;
+    } else if (clampedLeft === 0 && startDay.isBefore(gridStart)) {
+        // Оставляем полную ширину
+    }
+    
+    /* ПРАВЫЙ КРАЙ */
+    if (isRealEndVisible && clampedRight > 0 && clampedRight <= totalGridDays) {
+        widthPx -= halfOffset;
+    } else if (clampedRight === totalGridDays && endDay.isAfter(gridStart.add(totalGridDays, "day"))) {
+        // Оставляем полную ширину
+    }
+    
+    // Отступы для длинных документов
+    if (clampedRight - clampedLeft > 1) {
+        leftPx += offset;
+        widthPx -= offset * 2;
+    }
+        
+    var div = document.createElement("div");
+    div.className = "apartment-status";
+    div.id = apartmentStatusIdStr(status);
+    div.setAttribute("data-status-id", String(status.id));
+    div.setAttribute("data-date-create", String(status.dateCreate || "0"));
+    div.setAttribute("data-apartment-id", String(status.apartmentId));
+    div.setAttribute("data-status-type", status.statusType || "other");
+    
+    var color = statusColors[status.status] || "#F0F0F0";
+    div.style.background = color;
+    div.style.opacity = "0.6";
+    div.style.left = leftPx + "px";
+    div.style.width = widthPx + "px";
+    div.style.zIndex = "1";
+    
+    var label = status.reason || status.statusType || "Статус";
+    div.textContent = label + " · " + start.format("DD.MM") + "–" + end.format("DD.MM");
+    
+    // Обработчики событий
+    div.onmousemove = function(ev) {
+        if (fixedPopover.isFixed) return;
+        if (!selectedItem.element || selectedItem.id !== status.id) {
+            showStatusPopover(ev, status, false);
+        }
+    };
+    
+    div.onmouseleave = hidePopover;
+    
+    div.oncontextmenu = function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        selectItem("status", status.id, div, ev);
+    };
+    
+    div.ondblclick = function() {
+        dispatch('openDocument', status);
+    };
+    
+    div.onmousedown = function(ev) {
+        onStatusMouseDown(ev, status);
+    };
+    
+    div.onclick = function(ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        selectItem("status", status.id, div, ev);
+    };
+    
+    return div;
+}
 // drag-and-drop.js
 function checkItemCollision(itemId, itemType, apartmentId, newStart, newEnd) {
 
@@ -1460,7 +1662,7 @@ function checkItemCollision(itemId, itemType, apartmentId, newStart, newEnd) {
 		var bookingStart = dayjs(booking.start);
 		var bookingEnd = dayjs(booking.end);
 
-		if (newStart.isBefore(bookingEnd) && newEnd.isAfter(bookingStart)) return true;
+		if (newStart.isBefore(bookingEnd, "day") && newEnd.isAfter(bookingStart, "day")) return true;
 	}
 
 	// Проверяем ВСЕ статусы (независимо от типа)
@@ -1472,7 +1674,7 @@ function checkItemCollision(itemId, itemType, apartmentId, newStart, newEnd) {
 		var statusStart = dayjs(status.start);
 		var statusEnd = dayjs(status.end);
 
-		if (newStart.isBefore(statusEnd) && newEnd.isAfter(statusStart)) return true;
+		if (newStart.isBefore(statusEnd, "day") && newEnd.isAfter(statusStart, "day")) return true;
 	}
 
 	return false;
@@ -1483,56 +1685,48 @@ function onBookingMouseDown(ev, booking) {
 	if (booking.checkInAggregator === true) {
 		ev.preventDefault();
 		return;
-	} // Запрет перетаскивания если checkInAggregator = true
-	deselectItem(); // Снимаем выделение при начале перетаскивания
+	}
+	
+	deselectItem();
 	hidePopover();
 
 	var bookingEl = ev.currentTarget;
 	var oldStartDay = dayjs(booking.start).startOf("day");
 	var oldEndDay = dayjs(booking.end).startOf("day");
-	var durationDays = Math.max(
-		1,
-		oldEndDay.diff(oldStartDay, "day") + 1
-	);
-	// Получаем текущее отображаемое положение элемента
-	var visibleLeft = parseFloat(bookingEl.style.left) || 0;
-	var visibleWidth = parseFloat(bookingEl.style.width) || state.columnWidth;
-
-	// Вычисляем индекс дня от начала видимой области
-	var startDayIndex = Math.floor(visibleLeft / state.columnWidth);
-
-	// Вычисляем фактическую дату начала отображаемой части
+	var durationDays = oldEndDay.diff(oldStartDay, "day");
+	
+	// Получаем bounding rect относительно окна
+	var rect = bookingEl.getBoundingClientRect();
+	
+	// ВАЖНО: Получаем позицию элемента в контейнере rowsContent
+	var rowsContentRect = el.rowsContent.getBoundingClientRect();
+	var leftRelativeToRowsContent = rect.left - rowsContentRect.left;
+	
+	var startDayIndex = Math.floor(leftRelativeToRowsContent / state.columnWidth);
 	var visibleStartDate = state.anchorDate.add(startDayIndex, "day");
 
-	// Определяем, сколько дней элемента не видно слева
 	var daysHiddenLeft = 0;
 	if (oldStartDay.isBefore(visibleStartDate)) {
 		daysHiddenLeft = visibleStartDate.diff(oldStartDay, "day");
 	}
 
-	// Вычисляем на какой день внутри видимой части кликнули
-	var rect = bookingEl.getBoundingClientRect();
 	var clickOffsetX = ev.clientX - rect.left;
 	var clickedVisibleDayOffset = Math.floor(clickOffsetX / state.columnWidth);
-
-	// Полное смещение от фактического начала элемента до точки клика
 	var clickedDayOffset = daysHiddenLeft + clickedVisibleDayOffset;
 	clickedDayOffset = clamp(clickedDayOffset, 0, durationDays - 1);
 
-	// Сохраняем оригинальные стили для восстановления
 	var originalStyles = {
 		left: bookingEl.style.left,
 		width: bookingEl.style.width,
 		opacity: bookingEl.style.opacity
 	};
 
-	// Инициализируем dragState без создания dragEl
 	dragState = {
 		itemId: booking.id,
 		dateCreate: booking.dateCreate,
 		item: booking,
 		itemEl: bookingEl,
-		dragEl: null, // Пока null
+		dragEl: null,
 		itemType: "booking",
 		originalStartDate: oldStartDay,
 		durationDays: durationDays,
@@ -1547,7 +1741,7 @@ function onBookingMouseDown(ev, booking) {
 		rect: rect,
 		originalStartTime: dayjs(booking.start).format("HH:mm:ss"),
 		originalEndTime: dayjs(booking.end).format("HH:mm:ss"),
-		visibleWidth: visibleWidth
+		visibleWidth: parseFloat(bookingEl.style.width) || state.columnWidth
 	};
 
 	ev.preventDefault();
@@ -1561,49 +1755,40 @@ function onStatusMouseDown(ev, statusItem) {
 	var statusEl = ev.currentTarget;
 	var oldStartDay = dayjs(statusItem.start).startOf("day");
 	var oldEndDay = dayjs(statusItem.end).startOf("day");
-	var durationDays = Math.max(
-		1,
-		oldEndDay.diff(oldStartDay, "day") + 1
-	);
-	// Получаем текущее отображаемое положение элемента
-	var visibleLeft = parseFloat(statusEl.style.left) || 0;
-	var visibleWidth = parseFloat(statusEl.style.width) || state.columnWidth;
-
-	// Вычисляем индекс дня от начала видимой области
-	var startDayIndex = Math.floor(visibleLeft / state.columnWidth);
-
-	// Вычисляем фактическую дату начала отображаемой части
+	var durationDays = oldEndDay.diff(oldStartDay, "day");
+	
+	// Получаем bounding rect относительно окна
+	var rect = statusEl.getBoundingClientRect();
+	
+	// ВАЖНО: Получаем позицию элемента в контейнере rowsContent
+	var rowsContentRect = el.rowsContent.getBoundingClientRect();
+	var leftRelativeToRowsContent = rect.left - rowsContentRect.left;
+	
+	var startDayIndex = Math.floor(leftRelativeToRowsContent / state.columnWidth);
 	var visibleStartDate = state.anchorDate.add(startDayIndex, "day");
 
-	// Определяем, сколько дней элемента не видно слева
 	var daysHiddenLeft = 0;
 	if (oldStartDay.isBefore(visibleStartDate)) {
 		daysHiddenLeft = visibleStartDate.diff(oldStartDay, "day");
 	}
 
-	// Вычисляем на какой день внутри видимой части кликнули
-	var rect = statusEl.getBoundingClientRect();
 	var clickOffsetX = ev.clientX - rect.left;
 	var clickedVisibleDayOffset = Math.floor(clickOffsetX / state.columnWidth);
-
-	// Полное смещение от фактического начала элемента до точки клика
 	var clickedDayOffset = daysHiddenLeft + clickedVisibleDayOffset;
 	clickedDayOffset = clamp(clickedDayOffset, 0, durationDays - 1);
 
-	// Сохраняем оригинальные стили для восстановления
 	var originalStyles = {
 		left: statusEl.style.left,
 		width: statusEl.style.width,
 		opacity: statusEl.style.opacity
 	};
 
-	// Инициализируем dragState без создания dragEl
 	dragState = {
 		itemId: statusItem.id,
 		dateCreate: statusItem.dateCreate,
 		item: statusItem,
 		itemEl: statusEl,
-		dragEl: null, // Пока null
+		dragEl: null,
 		itemType: "status",
 		originalStartDate: oldStartDay,
 		durationDays: durationDays,
@@ -1618,7 +1803,7 @@ function onStatusMouseDown(ev, statusItem) {
 		rect: rect,
 		originalStartTime: dayjs(statusItem.start).format("HH:mm:ss"),
 		originalEndTime: dayjs(statusItem.end).format("HH:mm:ss"),
-		visibleWidth: visibleWidth
+		visibleWidth: parseFloat(statusEl.style.width) || state.columnWidth
 	};
 
 	ev.preventDefault();
@@ -1650,7 +1835,7 @@ function onDocumentMouseMove(ev) {
 		dragEl.style.background = dragState.itemEl.style.background;
 		dragEl.style.color = dragState.itemEl.style.color;
 		dragEl.style.zIndex = "1000";
-		dragEl.style.position = "absolute";
+		dragEl.style.position = "fixed"; // Изменяем на fixed
 		dragEl.style.pointerEvents = "none";
 
 		if (dragState.itemType === "status") {
@@ -1669,31 +1854,40 @@ function onDocumentMouseMove(ev) {
 		dragState.itemEl.style.opacity = "0.3";
 	}
 
-	// Обновляем позицию временного элемента с шаговым перемещением
+	// Обновляем позицию временного элемента с шаговым перемещением по горизонтали
 	var deltaX = ev.clientX - dragState.startX;
 	var snappedDeltaDays = Math.round(deltaX / state.columnWidth);
 	var snappedDeltaX = snappedDeltaDays * state.columnWidth;
 
+	// Обновляем left позицию
 	dragState.dragEl.style.left = (dragState.rect.left + snappedDeltaX) + "px";
 
-	var rowsRect = el.rowsContent.getBoundingClientRect();
-	var relativeY = ev.clientY - rowsRect.top + el.rowsViewport.scrollTop;
-	var rowHeight = 42;
+	// ВАЖНО: Правильно вычисляем вертикальную позицию
+	var rowsViewportRect = el.rowsViewport.getBoundingClientRect();
+	
+	// Получаем вертикальную позицию мыши относительно rowsViewport
+	var relativeY = ev.clientY - rowsViewportRect.top + el.rowsViewport.scrollTop;
+	
+	// Высота строки должна быть 40px (как в CSS)
+	var rowHeight = 40;
 	var rowIndex = Math.floor(relativeY / rowHeight);
 	var clampedRowIndex = clamp(rowIndex, 0, apartments.length - 1);
-	var newTop =
-		rowsRect.top +
-		clampedRowIndex * rowHeight -
-		el.rowsViewport.scrollTop;
-
+	
+	// Рассчитываем новую позицию top для dragEl
+	var newTop = rowsViewportRect.top + 
+				 (clampedRowIndex * rowHeight) - 
+				 el.rowsViewport.scrollTop;
+	
+	// Устанавливаем новую вертикальную позицию
 	dragState.dragEl.style.top = newTop + "px";
+	
 	var targetApartmentId = apartments[clampedRowIndex].id;
 
 	// Рассчитываем новую дату начала на основе смещения мыши
 	var deltaDays = snappedDeltaDays;
 	var newStartDay = dragState.originalStartDate.add(deltaDays, "day");
 	var newStart = dayjs(newStartDay.format("YYYY-MM-DD") + "T" + dragState.originalStartTime);
-	var newEndDay = newStartDay.add(dragState.durationDays - 1, "day");
+	var newEndDay = newStartDay.add(dragState.durationDays, "day");
 	var newEnd = dayjs(newEndDay.format("YYYY-MM-DD") + "T" + dragState.originalEndTime);
 
 	var hasCollision = checkItemCollision(
@@ -1734,9 +1928,17 @@ function onDocumentMouseUp(ev) {
 
 	if (ds.hasMoved && ds.isValid) {
 		var deltaDays = Math.round((ev.clientX - ds.startX) / state.columnWidth);
+		
+		// Также получаем новую строку (квартиру) для перемещения
+		var rowsViewportRect = el.rowsViewport.getBoundingClientRect();
+		var relativeY = ev.clientY - rowsViewportRect.top + el.rowsViewport.scrollTop;
+		var rowHeight = 40;
+		var rowIndex = Math.floor(relativeY / rowHeight);
+		var clampedRowIndex = clamp(rowIndex, 0, apartments.length - 1);
+		var targetApartmentId = apartments[clampedRowIndex].id;
 
 		var newStartDay = ds.originalStartDate.add(deltaDays, "day");
-		var newEndDay = newStartDay.add(ds.durationDays - 1, "day");
+		var newEndDay = newStartDay.add(ds.durationDays, "day");
 
 		pendingAction = {
 			type: ds.itemType, // "booking" | "status"
@@ -1744,13 +1946,15 @@ function onDocumentMouseUp(ev) {
 			dateCreate: ds.dateCreate,
 			oldState: structuredClone(ds.item),
 			newState: {
-				apartmentId: ds.currentApartmentId,
-				start: newStartDay.format("YYYY-MM-DD") + "T" + dayjs(ds.item.start).format("HH:mm:ss"),
-				end: newEndDay.format("YYYY-MM-DD") + "T" + dayjs(ds.item.end).format("HH:mm:ss")
+			    apartmentId: targetApartmentId,
+			    start: newStartDay.format("YYYY-MM-DD") + "T" + ds.originalStartTime,
+			    end: newEndDay.format("YYYY-MM-DD") + "T" + ds.originalEndTime
 			}
 		};
 
-		dispatch(ds.itemType + "MoveRequest", pendingAction);
+		pendingAction.oldState.itemEl = ds.itemEl;  // Добавляем ссылку на DOM-элемент
+	    applyOptimisticUpdate(pendingAction);
+	    dispatch(ds.itemType + "MoveRequest", pendingAction);
 	} else {
 		// Если просто кликнули (не перетащили) - выделяем элемент
 		if (!ds.hasMoved && selectedItem.element !== ds.itemEl) {
@@ -1760,8 +1964,53 @@ function onDocumentMouseUp(ev) {
 	dragState = null;
 }
 
+function applyOptimisticUpdate(action) {
+    var itemType = action.type;
+    var newState = action.newState;
+    var oldState = action.oldState;
+    
+    // Удаляем старый DOM-элемент, если он есть
+    if (oldState.itemEl) {
+        oldState.itemEl.remove();
+    }
+    
+    // Находим и обновляем элемент в данных
+    var array = (itemType === "booking") ? bookings : apartmentStatuses;
+    var index = array.findIndex(item => String(item.id) === String(action.id) && String(item.dateCreate) === String(action.dateCreate));
+    if (index !== -1) {
+        // Сохраняем старое состояние для rollback
+        array[index].__oldState = structuredClone(oldState);
+        // Применяем новые значения
+        Object.assign(array[index], newState);
+        
+        // Перестраиваем индексы (bookingsByApartment, statusesByApartment)
+        rebuildIndexes();
+        
+        // Перерисовываем видимые элементы
+        renderVisibleItems();
+    }
+}
+
+function rollbackOptimisticUpdate(action) {
+    var itemType = action.type;
+    var array = (itemType === "booking") ? bookings : apartmentStatuses;
+    var index = array.findIndex(item => String(item.id) === String(action.id) && String(item.dateCreate) === String(action.dateCreate));
+    if (index !== -1 && array[index].__oldState) {
+        // Восстанавливаем старое состояние
+        Object.assign(array[index], array[index].__oldState);
+        delete array[index].__oldState;
+        
+        // Перестраиваем индексы
+        rebuildIndexes();
+        
+        // Перерисовываем видимые элементы
+        renderVisibleItems();
+    }
+}
+
 document.addEventListener("mousemove", onDocumentMouseMove);
 document.addEventListener("mouseup", onDocumentMouseUp);
+
 // selection.js
 var selectionHandlersAttached = false;
 
@@ -1875,7 +2124,34 @@ function showBookingPopover(ev, b, isFixed = false) {
 	var ap = getApartmentById(b.apartmentId);
 	var apartmentName = ap ? ap.name : b.apartmentId;
 	var bookingHtml = '<div class="kv">' + '<div class="kv-row"><div class="kv-label">' + 'Квартира' + '</div><div class="kv-value">' + apartmentName + '</div></div>' + '<div class="kv-row"><div class="kv-label">' + 'Источник' + '</div><div class="kv-value">' + safe(b.aggregator) + '</div></div>' + '<div class="kv-row"><div class="kv-label">' + 'Гость' + '</div><div class="kv-value">' + safe(b.guestName) + '</div></div>' + '<div class="kv-row"><div class="kv-label">' + 'Даты' + '</div><div class="kv-value">' + dayjs(b.start).format('DD.MM.YYYY HH:mm') + ' → ' + dayjs(b.end).format('DD.MM.YYYY HH:mm') + '</div></div>' + '<div class="kv-row"><div class="kv-label">' + 'Статус' + '</div><div class="kv-value">' + safe(b.status) + '</div></div>' + '</div>';
-	p.innerHTML = '<div class="title">Бронирование #' + b.id + '</div>' + bookingHtml;
+	
+	let headerHtml = `
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px;">
+            <div class="title" style="margin: 0; flex: 1;">
+                Бронирование #${b.id}
+            </div>
+    `;
+
+    let eventIconsHtml = '';
+    if (b.events && Array.isArray(b.events) && b.events.length > 0) {
+        const sortedEvents = sortEvents(b.events);
+        eventIconsHtml = '<div class="events-container" style="flex-shrink: 0;">';
+        sortedEvents.forEach(event => {
+            if (eventIcons[event]) {
+                const title = eventTitles[event] || event;
+                eventIconsHtml += `
+                    <div class="event-icon" title="${title}">
+                        ${eventIcons[event]}
+                    </div>`;
+            }
+        });
+        eventIconsHtml += '</div>';
+    }
+
+    headerHtml += eventIconsHtml + '</div>';
+	
+	p.innerHTML = headerHtml + bookingHtml;
+	
 	var buttonsDiv = document.createElement('div');
 	buttonsDiv.className = 'popover-buttons';
 	var btnOpen = document.createElement('button');
@@ -1893,6 +2169,7 @@ function showBookingPopover(ev, b, isFixed = false) {
 	buttonsDiv.appendChild(btnOpen);
 	buttonsDiv.appendChild(btnCopy);
 	p.appendChild(buttonsDiv);
+	
 	if (!isFixed) {
 		var x = clamp(ev.clientX + 16, 8, window.innerWidth - 380);
 		var y = clamp(ev.clientY + 16, 8, window.innerHeight - 220);
@@ -1966,6 +2243,64 @@ function hidePopover() {
 		el.infoPopover.style.display = 'none';
 	}
 }
+
+// Функции для работы с событиями бронирований
+const eventIcons = {
+    email_sent: '<svg width="800px" height="800px" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" version="1.1" fill="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"/><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"/><g id="SVGRepo_iconCarrier"> <g style="stroke:#333333;stroke-width:2"> <path style="fill:#cccccc" d="m 3,16 94,0 0,68 -94,0 z"/> <path style="fill:#e6e6e6" d="m 4,16 34,33 c 7,7 15,7 23,0 L 96,16 z"/> <path style="fill:none" d="M 96,84 59,51 M 4,84 40,51"/> </g> <path style="fill:#4CBB4F;stroke:#004100;stroke-width:3;stroke-opacity:0.6;fill-opacity:0.7" d="M 27,73 C 20,58 23,37 35,27 45,19 60,16 72,18 L 72,5 97,28 72,54 72,41 C 72,41 51,35 40,46 29,57 27,73 27,73 z"/> <path style="fill:#35ff35;fill-opacity:0.85;stroke:#007300;stroke-width:2;" d="M 4,36 C 8,42 26,73 31,93 38,82 44,63 98,12 78,22 51,44 33,60 26,55 18,44 4,36"/></g></svg>',
+    email_notSent: '<svg width="256px" height="256px" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" version="1.1" fill="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"/><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"/><g id="SVGRepo_iconCarrier"> <g style="stroke:#333333;stroke-width:2"> <path style="fill:#c7c7c7" d="m 3,16 94,0 0,68 -94,0 z"/> <path style="fill:#e3e3e3" d="m 4,16 34,33 c 7,7 15,7 23,0 L 96,16 z"/> <path style="fill:none" d="M 96,84 59,51 M 4,84 40,51"/> </g> <defs> <mask id="mask_circle"> <circle cx="50" cy="50" r="50" fill="white"/> <circle cx="50" cy="50" r="12" fill="#000000"/> </mask> <linearGradient x1="20" y1="60" x2="60" y2="40" id="Gradient" gradientUnits="userSpaceOnUse"> <stop style="stop-color:#c20000;stop-opacity:1" offset="0"/> <stop style="stop-color:#ff5c5c;stop-opacity:1" offset="1"/> </linearGradient> </defs> <g transform="scale(0.6), translate(56,56)"> <path style="fill:none;stroke:#dd1d1d;stroke-width:3;" d="M 96,81 61,12 C 57,2.7 43,2.7 39,12 39,12 5.4,78 3.4,83 c -2,5 0,12 8.6,12 l 71,0 c 12,0 17,-5 13,-14 z"/> <path style="fill:url(#Gradient);stroke:#444444;stroke-width:7" d="M 91,80 58,16 C 54,7.1 46,7.1 42,16 42,16 11,77 9,81 6.2,86 5.8,91 14,91 l 67,0 c 12,0 14,-3 10,-11 z"/> <path style="fill:#333333;" d="M 46,63 43,35 57,35 54,63 z"/> <circle cx="50" cy="73" r="7" style="fill:#333333"/> </g> </g></svg>'
+};
+
+const eventTitles = {
+    email_sent: 'Приветственное письмо отправлено',
+    email_notSent: 'Приветственное письмо не отправлено',
+    payment_received: 'Оплата получена',
+    cleaning_scheduled: 'Уборка запланирована',
+    key_delivered: 'Ключ передан',
+    document_signed: 'Документ подписан',
+    review_requested: 'Отзыв запрошен',
+    maintenance_completed: 'Обслуживание завершено'
+};
+
+// Порядок отображения событий (первое - самое важное/последнее)
+const eventOrder = [
+    'checkin_code',
+    'payment_received',
+    'document_signed',
+    'key_delivered',
+    'email_sent',
+    'cleaning_scheduled',
+    'review_requested',
+    'maintenance_completed'
+];
+
+function sortEvents(events) {
+    if (!events || !Array.isArray(events)) return [];
+    
+    return events.sort((a, b) => {
+        const indexA = eventOrder.indexOf(a);
+        const indexB = eventOrder.indexOf(b);
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+    });
+}
+
+function renderEventIcons(events) {
+    if (!events || events.length === 0) return '';
+    
+    const sortedEvents = sortEvents(events);
+    let iconsHtml = '<div class="events-container">'; // ← использовать div вместо span
+    
+    sortedEvents.forEach(event => {
+        if (eventIcons[event]) {
+            const title = eventTitles[event] || event;
+            iconsHtml += `<div class="event-icon" title="${title}">${eventIcons[event]}</div>`;
+        }
+    });
+    
+    iconsHtml += '</div>';
+    return iconsHtml;
+}
 // timeline.js
 function renderNowLine() {
 	var now = dayjs();
@@ -1988,7 +2323,10 @@ function renderNowLine() {
 setInterval(renderNowLine, 600000); // каждые 10 минут
 
 function syncHeaderScroll() {
-	el.daysViewport.scrollLeft = el.rowsViewport.scrollLeft;
+	// Синхронизируем скролл только если оба контейнера доступны
+	if (el.daysViewport && el.rowsViewport) {
+		el.daysViewport.scrollLeft = el.rowsViewport.scrollLeft;
+	}
 	renderNowLine();
 }
 // 1c-api.js
@@ -2056,7 +2394,20 @@ window.SetScale = function(width) {
 
 window.SetPeriodAuto = function(isAuto) {
 	state.periodAuto = !!isAuto;
-	clearAllCaches(); // FIX: Очистка при смене режима
+	clearAllCaches(); // Очистка при смене режима
+	
+	// Если переключаемся в ручной режим, сбрасываем скролл и устанавливаем anchorDate на начало периода
+	if (!state.periodAuto) {
+		// Сбрасываем скролл к началу периода
+		el.rowsViewport.scrollLeft = 0;
+		el.daysViewport.scrollLeft = 0;
+		
+		// ВАЖНО: Устанавливаем anchorDate на начало периода для согласованности
+		if (state.periodFrom) {
+			state.anchorDate = state.periodFrom.clone();
+		}
+	}
+	
 	onPeriodChanged();
 	applyScrollMode();
 	renderAll();
@@ -2066,23 +2417,42 @@ window.SetPeriodAuto = function(isAuto) {
 };
 
 window.SetPeriod = function(fromStr, toStr) {
-	var from = dayjs(fromStr);
-	var to = dayjs(toStr);
-	if (!from.isValid() || !to.isValid()) {
-		return {
-			success: false,
-			error: "Ожидается формат YYYY-MM-DD"
-		};
-	}
-	state.periodAuto = false;
-	state.periodFrom = from.startOf("day");
-	state.periodTo = to.startOf("day");
-	clearAllCaches(); // FIX: Очистка кэшей
-	onPeriodChanged(); // ДОБАВИТЬ
-	renderAll();
-	return {
-		success: true
-	};
+    var from = dayjs(fromStr);
+    var to = dayjs(toStr);
+    if (!from.isValid() || !to.isValid()) {
+        return {
+            success: false,
+            error: "Ожидается формат YYYY-MM-DD"
+        };
+    }
+    state.periodAuto = false;
+    state.periodFrom = from.startOf("day");
+    state.periodTo = to.startOf("day");
+    
+    // ВАЖНО: Обновляем anchorDate на начало периода
+    state.anchorDate = state.periodFrom.clone();
+    
+    // Заполняем allDaysArray dayjs объектами
+    allDaysArray = [];
+    totalDaysCount = 0;
+    var current = state.periodFrom.clone();
+    var end = state.periodTo;
+    
+    while (current.isSameOrBefore(end)) {
+        allDaysArray.push(current.clone());
+        current = current.add(1, 'day');
+    }
+    
+    totalDaysCount = allDaysArray.length;
+    // ВАЖНО: visibleDays должно быть равно количеству видимых дней, а не всего периода!
+    state.visibleDays = calcAutoVisibleDays();
+    
+    clearAllCaches();
+    onPeriodChanged();
+    renderAll();
+    return {
+        success: true
+    };
 };
 
 window.SetTariffMode = function(enabled) {
@@ -2200,39 +2570,33 @@ window.setStatusColors = function(jsonString) {
 	}
 };
 window.confirmPendingAction = function() {
-	if (!pendingAction) return {
-		success: false
-	};
-
-	if (pendingAction.type === "selection") {
-		finishSelection(false);
-	} else {
-		applyPendingAction(pendingAction);
-	}
-
-	pendingAction = null;
-	renderVisibleItems();
-	return {
-		success: true
-	};
+    if (!pendingAction) return { success: false };
+    if (pendingAction.type === "selection") {
+        finishSelection(false);
+    } else {
+        // Удаляем временное поле __oldState при успехе
+        var itemType = pendingAction.type;
+        var array = (itemType === "booking") ? bookings : apartmentStatuses;
+        var index = array.findIndex(item => String(item.id) === String(pendingAction.id) && String(item.dateCreate) === String(pendingAction.dateCreate));
+        if (index !== -1) {
+            delete array[index].__oldState;
+        }
+    }
+    pendingAction = null;
+    renderVisibleItems();
+    return { success: true };
 };
 
 window.cancelPendingAction = function() {
-	if (!pendingAction) return {
-		success: false
-	};
-
-	if (pendingAction.type === "selection") {
-		finishSelection(true);
-	} else {
-		rollbackPendingAction(pendingAction);
-	}
-
-	pendingAction = null;
-	renderVisibleItems();
-	return {
-		success: true
-	};
+    if (!pendingAction) return { success: false };
+    if (pendingAction.type === "selection") {
+        finishSelection(true);
+    } else {
+        rollbackOptimisticUpdate(pendingAction);
+    }
+    pendingAction = null;
+    renderVisibleItems();
+    return { success: true };
 };
 
 window.renderNowLinefrom1C = function() {
@@ -2305,19 +2669,39 @@ window.onDocumentsLoaded = function() {
 	renderAll();
 
 	let scrollCounter = 0;
-
+	let isTicking = false;
+	
 	setInterval(() => {
 	  if (scrollCounter > 0) {
 	    console.log("scroll events / sec =", scrollCounter);
 	    scrollCounter = 0;
 	  }
 	}, 1000);
+	
 	el.rowsViewport.addEventListener("scroll", () => {
-		scrollCounter++;
-		syncHeaderScroll();
-		renderVisibleRows();
-		renderVisibleItems();
-	});
+    scrollCounter++;
+    
+    // ВАЖНО: Обновляем anchorDate при скролле в ручном режиме
+    /*if (!state.periodAuto && state.periodFrom) {
+        var scrollLeft = el.rowsViewport.scrollLeft;
+        var scrollDays = Math.floor(scrollLeft / state.columnWidth);
+        state.anchorDate = state.periodFrom.add(scrollDays, 'day');
+    }*/
+    
+    // Если кадр еще не отрисован, выходим и ждем
+    if (!isTicking) {
+        window.requestAnimationFrame(() => {
+            // Выполняем синхронизацию и рендер только в свободный кадр (60 FPS)
+            syncHeaderScroll();
+            //renderHeaderDays(); // ДОБАВЬТЕ ЭТО - обновлять заголовок при скролле!
+            renderVisibleRows(); 
+            renderVisibleItems();
+            
+            isTicking = false; // Разрешаем следующий вызов
+        });
+        isTicking = true; // Блокируем новые вызовы до завершения анимации
+    }
+});
 
 	// 3. Клик вне элементов — снятие выделения
 	document.addEventListener('click', function(ev) {
@@ -2373,15 +2757,14 @@ window.onDocumentsLoaded = function() {
 
 	});
 	attachSelectionHandlersOnce();
+	
 	// Проверяем, есть ли ResizeObserver (встроенный или из polyfill)
 	if (typeof ResizeObserver !== 'undefined') {
 		const resizeObserver = new ResizeObserver(() => {
-			if (state.periodAuto) {
-				const days = calcAutoVisibleDays();
-				if (days !== state.visibleDays) {
-					state.visibleDays = days;
-					renderAll();
-				}
+			const days = calcAutoVisibleDays();
+			if (days !== state.visibleDays) {
+				state.visibleDays = days;
+				renderAll();
 			}
 		});
 		resizeObserver.observe(el.rowsViewport);
@@ -2389,6 +2772,8 @@ window.onDocumentsLoaded = function() {
 		console.warn('ResizeObserver не поддерживается в этом браузере. Автоматическая коррекция ширины отключена.');
 		// Здесь можно добавить fallback, но для простоты просто пропустим
 	}
+	
+	
 })();
 		</script>
 	</body>
