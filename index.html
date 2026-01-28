@@ -2752,7 +2752,11 @@ window.onDocumentsLoaded = function() {
 		return originalSetPeriod(fromStr, toStr);
 	};
 	
-	// 1. Первый рендер
+	// 1. Инициализация visibleDays и массива дней
+	state.visibleDays = calcAutoVisibleDays();
+	updateAllDaysArray();
+
+	// 2. Первый рендер
 	renderAll();
 
 	let scrollCounter = 0;
